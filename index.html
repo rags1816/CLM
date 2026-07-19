@@ -99,9 +99,19 @@
 
   #tourOverlay{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;z-index:95;pointer-events:none;padding:16px;}
   #tourCard{pointer-events:auto;background:var(--ink);color:var(--paper);border-radius:6px;padding:16px 20px;max-width:480px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,0.35);}
+  #tourCard.collapsed{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;max-width:220px;cursor:move;}
   #tourCard .mono{color:var(--gold);}
   .stagingRow{display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid var(--line);padding:8px 0;}
   .stagingRow .txt{flex:1;font-size:12.5px;line-height:1.4;}
+
+  .cbanner{border:1px solid var(--line);border-radius:2px;margin-bottom:14px;overflow:hidden;background:var(--panel);}
+  .cbanner-head{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;cursor:pointer;background:#faf9f6;}
+  .cbanner-head b{font-size:12.5px;}
+  .cbanner-body{padding:10px 12px;font-size:12.5px;}
+  .cbanner.collapsed .cbanner-body{display:none;}
+  .cbanner.amber .cbanner-head{border-left:3px solid var(--amber);}
+  .cbanner.sticky{position:sticky;top:54px;z-index:40;box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+  .cbanner-toggle{background:none;border:1px solid var(--line);color:var(--slate);font-size:11px;padding:3px 9px;border-radius:2px;}
 </style>
 </head>
 <body>
@@ -128,7 +138,9 @@ const SCREENS = [
   {id:'tiering', label:'0 · Tiering'},
   {id:'framework', label:'Framework'},
   {id:'qbr', label:'QBR'},
-  {id:'register', label:'Obligations/SLA'},
+  {id:'rebates', label:'Rebates'},
+  {id:'register', label:'Obligations/SLA/CO'},
+  {id:'coverage', label:'Coverage & Feedback'},
   {id:'scorecard', label:'Maturity'},
   {id:'governance', label:'Governance'},
   {id:'settings', label:'⚙ Settings'}
@@ -181,7 +193,9 @@ const GUIDE_TIPS = {
   tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.'],
   framework:['The full 0–7 framework brief, plus benchmarking references (CIPS, Hackett, WorldCC).','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.'],
   qbr:['Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.'],
-  register:['One register for both obligations and SLAs — filter by type. Status auto-flags overdue items by due date.','Word/PDF import needs internet to load the parser — no offline fallback for that specific action.','Import also suggests a Section 0 tier for the contract, and routes KPI/SLA-style clauses to the QBR tab.'],
+  rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.'],
+  register:['One register for obligations, SLAs, and change orders — filter by type. Status auto-flags overdue items by due date.','Word/PDF import needs internet to load the parser — no offline fallback for that specific action.','Import also suggests a Section 0 tier for the contract, and routes KPI/SLA-style clauses to the QBR tab.'],
+  coverage:['Three logs in one place: category spend coverage, stakeholder feedback, and supplier collaboration opportunities.','% spend under contract here feeds the Governance rollup — keep it current, it\'s the headline leakage indicator.'],
   scorecard:['Score your organisation 1–5 across each dimension. This feeds the Governance rollup.','Re-run quarterly to track maturity trend.'],
   governance:['This is the CPO-facing rollup: spend coverage, tier mix, overdue obligations, maturity gaps — the value-leak view.','Everything here is computed live from the other tabs.','PowerPoint deck export needs internet to load the library once per session.'],
   settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.']
@@ -243,6 +257,54 @@ Structured post-QBR stakeholder surveys tied to specific KPIs, not generic satis
 **WorldCC (formerly IACCM)** research puts average value leakage from poor contract/commercial management at roughly **9% of contract value** — largely unmanaged obligations, unclaimed rebates/credits, and missed renegotiation windows. Their maturity model (ad hoc → managed → optimised) is a useful self-assessment reference.
 `;
 
+const FRAMEWORK_QUICKADD = [
+  {match:'Section 1 — Obligation Tracking', action:'obligations', label:'+ Add starter obligations to Register', rows:[
+    'Insurance certificate renewal — annual',
+    'Audit rights exercise — as needed',
+    'Annual price review notice',
+    'Data protection / security compliance attestation'
+  ]},
+  {match:'Section 2 — KPIs', action:'kpis', label:'+ Add starter KPIs to QBR', rows:[
+    {name:'On-time delivery', target:'98%'},
+    {name:'Defect / return rate', target:'<1%'},
+    {name:'Cost avoidance vs budget', target:'5%'}
+  ]},
+  {match:'Section 3 — SLAs', action:'slas', label:'+ Add starter SLAs to QBR', rows:[
+    {name:'System uptime / availability', target:'99.9%'},
+    {name:'Incident response time', target:'4 hours'},
+    {name:'Resolution time (P1)', target:'24 hours'}
+  ]},
+  {match:'Section 4 — Rebate Monitoring', action:'rebates', label:'+ Add starter rebate tiers to Rebate tracker', rows:[
+    {contractName:'', tierName:'Tier 1', threshold:'$0 – $500,000', ratePct:0},
+    {contractName:'', tierName:'Tier 2', threshold:'$500,001 – $1,000,000', ratePct:2},
+    {contractName:'', tierName:'Tier 3', threshold:'$1,000,001+', ratePct:4}
+  ]},
+  {match:'Section 5 — Contract Change Orders / Amendments', action:'changeorders', label:'+ Add starter change order log entries', rows:[
+    'Pricing amendment — CPI/index adjustment',
+    'Scope change — added service line',
+    'Term extension'
+  ]},
+  {match:'Section 6 — Termination', action:'obligations', label:'+ Add starter termination/renewal items to Register', rows:[
+    'Auto-renewal decision deadline',
+    'Termination-for-convenience notice window',
+    'Data return / destruction on exit',
+    'Transition services checklist sign-off'
+  ]}
+];
+function applyQuickAdd(spec){
+  if(spec.action==='obligations'){
+    spec.rows.forEach(r=> STATE.register.push({id:uid(), type:'Obligation', description:r, owner:'', dueDate:'', recurrence:'One-off', status:'Open'}));
+  }else if(spec.action==='changeorders'){
+    spec.rows.forEach(r=> STATE.register.push({id:uid(), type:'Change Order', description:r, owner:'', dueDate:'', recurrence:'One-off', status:'Open'}));
+  }else if(spec.action==='kpis'){
+    spec.rows.forEach(r=> STATE.qbr.kpis.push({id:uid(), name:r.name, target:r.target, actual:'', status:'On track'}));
+  }else if(spec.action==='slas'){
+    spec.rows.forEach(r=> STATE.qbr.slas.push({id:uid(), name:r.name, target:r.target, actual:'', status:'On track'}));
+  }else if(spec.action==='rebates'){
+    spec.rows.forEach(r=> STATE.rebates.push({id:uid(), contractName:r.contractName||'', tierName:r.tierName, threshold:r.threshold, ratePct:r.ratePct, spendToDate:0, status:'Open'}));
+  }
+  saveState();
+}
 /* ---------- state ---------- */
 const DEFAULT_STATE = {
   screen:'about',
@@ -252,6 +314,8 @@ const DEFAULT_STATE = {
   tierScheme:'standard',
   qbr:{supplier:'',period:'',kpis:[],slas:[],rebates:'',risks:'',actions:'',narrative:''},
   register:[],
+  rebates:[],
+  coverage:{categories:[], feedback:[], collaboration:[]},
   scorecard:{}
 };
 let STATE = loadState();
@@ -269,6 +333,31 @@ function saveState(){
 }
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- collapsible banners ---------- */
+let BANNER_STATE = {}; // session-only: id -> true(open)/false(collapsed)
+function bannerOpen(id, defaultOpen=true){ return BANNER_STATE[id]===undefined ? defaultOpen : BANNER_STATE[id]; }
+function collapsibleBanner(id, titleHtml, bodyHtml, opts={}){
+  const open = bannerOpen(id, opts.defaultOpen!==false);
+  const cls = ['cbanner', open?'':'collapsed', opts.amber?'amber':'', opts.sticky?'sticky':''].filter(Boolean).join(' ');
+  return `<div class="${cls}" data-banner="${id}">
+    <div class="cbanner-head" data-bannertoggle="${id}"><b>${titleHtml}</b><button class="cbanner-toggle" type="button">${open?'Hide':'Show'}</button></div>
+    <div class="cbanner-body">${bodyHtml}</div>
+  </div>`;
+}
+document.addEventListener('click', e=>{
+  const t = e.target.closest('[data-bannertoggle]');
+  if(!t) return;
+  const id = t.dataset.bannertoggle;
+  BANNER_STATE[id] = !bannerOpen(id);
+  const wrap = document.querySelector(`[data-banner="${id}"]`);
+  if(wrap){
+    const open = bannerOpen(id);
+    wrap.classList.toggle('collapsed', !open);
+    const btn = wrap.querySelector('.cbanner-toggle');
+    if(btn) btn.textContent = open ? 'Hide' : 'Show';
+  }
+});
 
 function mdToHtmlClean(md){
   const esc2 = s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -521,19 +610,18 @@ async function aiScoreBulkContracts(rawListText){
 }
 
 /* ---------- render root ---------- */
-function setScreen(id){ STATE.screen = id; saveState(); render(); }
+function setScreen(id){ STATE.screen = id; saveState(); render(); renderFloaterTips(); }
 
 function render(){
   renderNav();
   const app = document.getElementById('app');
   const map = {
     about: renderAbout, tiering: renderTiering, framework: renderFramework,
-    qbr: renderQBR, register: renderRegister, scorecard: renderScorecard,
-    governance: renderGovernance, settings: renderSettings
+    qbr: renderQBR, rebates: renderRebates, register: renderRegister, coverage: renderCoverage,
+    scorecard: renderScorecard, governance: renderGovernance, settings: renderSettings
   };
   app.innerHTML = (map[STATE.screen]||renderAbout)();
   wireScreen(STATE.screen);
-  renderFloaterTips();
 }
 function renderNav(){
   const nav = document.getElementById('nav');
@@ -543,7 +631,45 @@ function renderNav(){
 function renderFloaterTips(){
   const panel = document.getElementById('floaterPanel');
   const tips = GUIDE_TIPS[STATE.screen]||[];
-  panel.innerHTML = `<h4>Guide · ${esc(STATE.screen)}</h4><ul>${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;
+  panel.innerHTML = `<h4>Guide · ${esc(STATE.screen)}</h4><ul>${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>
+    <hr class="divider" style="margin:10px 0;">
+    <p class="small" style="font-weight:600;margin-bottom:6px;">Ask about this screen</p>
+    <textarea id="floaterQ" placeholder="e.g. how is the tier score calculated?" style="min-height:50px;font-size:12.5px;padding:6px 8px;"></textarea>
+    <button class="btn small gold" id="floaterAsk" style="margin-top:6px;width:100%;">Ask</button>
+    <div id="floaterA" class="small" style="margin-top:8px;"></div>`;
+  document.getElementById('floaterAsk').addEventListener('click', askFloaterQuestion);
+  document.getElementById('floaterQ').addEventListener('keydown', e=>{
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); askFloaterQuestion(); }
+  });
+}
+function floaterScreenSummary(){
+  switch(STATE.screen){
+    case 'tiering': return `Current bulk table has ${STATE.tieringBulk.length} contract(s); naming scheme is "${STATE.tierScheme}".`;
+    case 'qbr': return `Current QBR is for supplier "${STATE.qbr.supplier||'(unset)'}", period "${STATE.qbr.period||'(unset)'}", with ${STATE.qbr.kpis.length} KPI(s) and ${STATE.qbr.slas.length} SLA(s) logged.`;
+    case 'rebates': return `Rebate tracker currently has ${STATE.rebates.length} tier(s) logged.`;
+    case 'register': return `Register currently has ${STATE.register.length} item(s) across Obligation/SLA/Change Order types.`;
+    case 'coverage': return `Coverage tab has ${STATE.coverage.categories.length} categor${STATE.coverage.categories.length===1?'y':'ies'}, ${STATE.coverage.feedback.length} feedback entries, ${STATE.coverage.collaboration.length} collaboration opportunities logged.`;
+    case 'scorecard': return `Maturity scorecard has 15 questions across 6 dimensions, each scored 1-5.`;
+    case 'governance': return `Governance rolls up tiering, register, rebates, coverage and scorecard data live — nothing entered here directly.`;
+    case 'framework': return `This screen shows the full 0-7 CLM framework brief with CIPS/Hackett/WorldCC benchmarking, plus quick-add buttons that seed other screens.`;
+    default: return '';
+  }
+}
+async function askFloaterQuestion(){
+  const qEl = document.getElementById('floaterQ');
+  const aEl = document.getElementById('floaterA');
+  const question = (qEl.value||'').trim();
+  if(!question) return;
+  aEl.innerHTML = '<span class="muted">Thinking…</span>';
+  const tips = (GUIDE_TIPS[STATE.screen]||[]).join(' ');
+  const summary = floaterScreenSummary();
+  const prompt = `You are the in-app guide for CLM Suite, a contract lifecycle management tool. The user is currently on the "${STATE.screen}" screen. Screen guide notes: ${tips} Live screen state: ${summary} Answer the user's question in 2-4 sentences, plain prose, specific to this screen and this app — not generic procurement advice unless asked. Question: ${question}`;
+  try{
+    const answer = await askAI(prompt);
+    aEl.innerHTML = `<div style="border-top:1px solid #dcd9d0;padding-top:6px;">${esc(answer).replace(/\n/g,'<br>')}</div>`;
+  }catch(e){
+    aEl.innerHTML = `<span style="color:var(--red);">${esc(e.message)}</span>`;
+  }
 }
 
 /* ========== ABOUT ========== */
@@ -581,9 +707,8 @@ function renderAbout(){
       <li><b>Your data stays local.</b> Everything lives in this browser's storage. AI calls (optional) go straight to your chosen provider using your own key.</li>
     </ul>
   </div>
-  <div class="card">
-    <h2>What works offline vs. what needs internet</h2>
-    <p class="small muted">This app is self-contained and stores everything locally — but a few specific actions load a small library from a CDN the first time you use them each session.</p>
+  ${collapsibleBanner('aboutOfflineOnline', 'What works offline vs. what needs internet',
+    `<p class="small muted">This app is self-contained and stores everything locally — but a few specific actions load a small library from a CDN the first time you use them each session.</p>
     <div class="grid2">
       <div>
         <h3 style="font-size:13.5px;">Fully offline, always</h3>
@@ -607,8 +732,8 @@ function renderAbout(){
         </ul>
       </div>
     </div>
-    <p class="small muted" style="margin-top:10px;">Full detail in ⚙ Settings.</p>
-  </div>
+    <p class="small muted" style="margin-top:10px;">Full detail in ⚙ Settings.</p>`,
+    {defaultOpen:true})}
   <div class="card">
     <h2>Roadmap</h2>
     <p class="small">This is v1.2. PDF/PPT ingestion and richer clause-level AI extraction are next.</p>
@@ -735,15 +860,49 @@ function renderFramework(){
     </div>
     <div id="fwSummaryOut"></div>
   </div>
-  <div class="card mdbody">${mdToHtmlClean(FRAMEWORK_MD)}</div>
+  <div class="card mdbody" id="fwBody">${(function(){
+    let html = mdToHtmlClean(FRAMEWORK_MD);
+    FRAMEWORK_QUICKADD.forEach((spec,i)=>{
+      const heading = `<h2>${spec.match}</h2>`;
+      const qa = `<h2>${spec.match}</h2><div class="row" style="margin:2px 0 10px;align-items:center;"><button class="btn small gold" data-qaclick="${i}">${esc(spec.label)}</button><span class="small muted" id="qaStatus${i}"></span></div>`;
+      html = html.replace(heading, qa);
+    });
+    return html;
+  })()}</div>
   <div class="row"><button class="btn outline" id="btnFwExport">Export framework brief to Word</button></div>`;
 }
 
 /* ========== QBR ========== */
+function normalizeSupplierName(s){
+  return (s||'').toLowerCase().trim()
+    .replace(/[.,]/g,'')
+    .replace(/\b(inc|incorporated|ltd|limited|llc|corp|corporation|co|company|plc|gmbh)\b\.?/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+function getFeedbackForSupplier(supplierName){
+  const target = normalizeSupplierName(supplierName);
+  if(!target) return {matches:[], matchType:'none', variants:[]};
+  const exact = STATE.coverage.feedback.filter(f=> normalizeSupplierName(f.subject)===target);
+  if(exact.length) return {matches:exact, matchType:'exact', variants:[]};
+  const fuzzy = STATE.coverage.feedback.filter(f=>{
+    const sub = normalizeSupplierName(f.subject);
+    return sub.length>=4 && target.length>=4 && (sub.includes(target) || target.includes(sub));
+  });
+  const variants = [...new Set(fuzzy.map(f=>f.subject))];
+  return {matches:fuzzy, matchType: fuzzy.length ? 'fuzzy' : 'none', variants};
+}
 function renderQBR(){
   const q = STATE.qbr;
+  const fb = getFeedbackForSupplier(q.supplier);
+  const feedback = fb.matches;
+  const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length) : null;
   return `
   <h2>QBR Template</h2>
+  ${collapsibleBanner('qbrTools', '📄 Reports & AI draft', `<div class="row">
+      <button class="btn gold" id="btnQbrDraft">AI draft QBR narrative</button>
+      <button class="btn outline" id="btnQbrExport">Export QBR to Word</button>
+      <button class="btn outline" id="btnQbrExportPpt">Export QBR to PowerPoint</button>
+    </div>`, {sticky:true})}
   <div class="card">
     <div class="row">
       <div class="col field"><label>Supplier</label><input type="text" id="qbrSupplier" value="${esc(q.supplier)}"></div>
@@ -760,12 +919,35 @@ function renderQBR(){
     <div class="field" style="margin-top:16px;"><label>Rebate summary</label><textarea id="qbrRebates">${esc(q.rebates)}</textarea></div>
     <div class="field"><label>Risks / open items</label><textarea id="qbrRisks">${esc(q.risks)}</textarea></div>
     <div class="field"><label>Action items</label><textarea id="qbrActions">${esc(q.actions)}</textarea></div>
-    <div class="row">
-      <button class="btn gold" id="btnQbrDraft">AI draft QBR narrative</button>
-      <button class="btn outline" id="btnQbrExport">Export QBR to Word</button>
-      <button class="btn outline" id="btnQbrExportPpt">Export QBR to PowerPoint</button>
-    </div>
     <div class="field" style="margin-top:14px;"><label>Narrative (editable)</label><textarea id="qbrNarrative" style="min-height:140px;">${esc(q.narrative)}</textarea></div>
+  </div>
+
+  <div class="card">
+    <h3>Stakeholder feedback ${q.supplier ? '— '+esc(q.supplier) : ''}<span class="small muted" style="font-weight:400;"> (from Coverage & Feedback tab, matched by supplier name)</span></h3>
+    ${q.supplier && fb.matchType==='fuzzy' ? collapsibleBanner('qbrFuzzyWarn',
+      '⚠ No exact name match',
+      `Showing ${fb.matches.length} approximate match(es) logged under a different spelling: <b>${fb.variants.map(esc).join(', ')}</b>. Names must match exactly for a confident match — approximate matches can mix up different suppliers.
+       <button class="btn small outline" id="btnStandardizeNames" style="margin-top:6px;display:block;">Standardize those entries to "${esc(q.supplier)}"</button>`,
+      {amber:true, defaultOpen:true}) : ''}
+    ${!q.supplier ? '<p class="small muted">Enter a supplier name above to match feedback.</p>' :
+      feedback.length ? `
+      <div class="result-strip" style="padding:10px 14px;margin-bottom:12px;">
+        <div><div class="eyebrow" style="color:#a39a89;">Average rating</div><div class="tname" style="font-size:20px;">${avgRating.toFixed(1)} / 5</div></div>
+        <div class="tscore small mono">${feedback.length} entr${feedback.length===1?'y':'ies'}</div>
+      </div>
+      ${feedback.slice(0,6).map(f=>`<div class="small" style="margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px;">
+        <b>${esc(f.stakeholder||'Unnamed')}</b> <span class="mono">${f.rating}/5</span> ${f.date?'· '+esc(f.date):''}<br>
+        <span class="muted">${esc(f.comment||'(no comment)')}</span></div>`).join('')}
+      ` : '<p class="small muted">No feedback logged for this supplier yet — add one below, or on the Coverage & Feedback tab.</p>'}
+    <hr class="divider">
+    <p class="small" style="font-weight:600;margin-bottom:8px;">Log new feedback for this supplier</p>
+    <div class="row">
+      <div class="col field" style="min-width:120px;"><label>Stakeholder</label><input type="text" id="qbrFbStakeholder"></div>
+      <div class="col field" style="min-width:80px;"><label>Rating (1–5)</label><input type="number" id="qbrFbRating" min="1" max="5" value="3"></div>
+      <div class="col field" style="min-width:200px;"><label>Comment</label><input type="text" id="qbrFbComment"></div>
+    </div>
+    <button class="btn small gold" id="btnQbrAddFeedback" ${!q.supplier?'disabled':''}>+ Log feedback</button>
+    ${!q.supplier ? '<span class="small muted" style="margin-left:8px;">Enter a supplier name first.</span>' : ''}
   </div>`;
 }
 function renderQbrLine(item,kind){
@@ -778,16 +960,197 @@ function renderQbrLine(item,kind){
   </tr>`;
 }
 
+/* ========== COVERAGE & FEEDBACK ========== */
+function renderCoverage(){
+  const c = STATE.coverage;
+  const totalSpend = c.categories.reduce((a,r)=>a+(Number(r.spend)||0),0);
+  const weightedCovered = c.categories.reduce((a,r)=>a+(Number(r.spend)||0)*(Number(r.pctContract)||0)/100,0);
+  const overallPct = totalSpend ? (weightedCovered/totalSpend*100) : 0;
+  return `
+  <h2>Stakeholder Feedback, Spend & Category Coverage</h2>
+  <p class="muted">The part of the framework that's usually only prose — here it's three live logs feeding one number: % of spend under active contract.</p>
+  <div class="result-strip"><div><div class="eyebrow" style="color:#a39a89;">Spend under active contract</div><div class="tname">${overallPct.toFixed(0)}%</div></div>
+    <div class="tscore small mono">$${totalSpend.toLocaleString(undefined,{maximumFractionDigits:0})} total tracked</div></div>
+
+  <div class="card">
+    <div class="flex-between"><h3 style="margin:0;">Category spend coverage</h3>
+      <div class="row"><button class="btn small outline" id="btnAddCategory">+ Add category</button><button class="btn small outline" id="btnCatCSV">Export CSV</button></div>
+    </div>
+    <table style="margin-top:10px;"><thead><tr><th>Category</th><th>Annual spend ($)</th><th>% under contract</th><th>Coverage</th><th></th></tr></thead>
+    <tbody>${c.categories.map(r=>renderCategoryRow(r)).join('') || '<tr><td colspan="5" class="small muted">No categories yet.</td></tr>'}</tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="flex-between"><h3 style="margin:0;">Stakeholder feedback</h3>
+      <div class="row"><button class="btn small outline" id="btnAddFeedback">+ Add feedback</button><button class="btn small outline" id="btnFbCSV">Export CSV</button></div>
+    </div>
+    <table style="margin-top:10px;"><thead><tr><th>Contract/Supplier</th><th>Stakeholder</th><th>Date</th><th>Rating (1–5)</th><th>Comment</th><th></th></tr></thead>
+    <tbody>${c.feedback.map(r=>renderFeedbackRow(r)).join('') || '<tr><td colspan="6" class="small muted">No feedback logged yet.</td></tr>'}</tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="flex-between"><h3 style="margin:0;">Supplier collaboration opportunities</h3>
+      <div class="row"><button class="btn small outline" id="btnAddCollab">+ Add opportunity</button><button class="btn small outline" id="btnCollabCSV">Export CSV</button></div>
+    </div>
+    <table style="margin-top:10px;"><thead><tr><th>Supplier</th><th>Type</th><th>Description</th><th>Status</th><th></th></tr></thead>
+    <tbody>${c.collaboration.map(r=>renderCollabRow(r)).join('') || '<tr><td colspan="5" class="small muted">No opportunities logged yet.</td></tr>'}</tbody></table>
+  </div>`;
+}
+function renderCategoryRow(r){
+  const status = r.pctContract>=90?'ok':(r.pctContract>=50?'due':'overdue');
+  const statusLabel = r.pctContract>=90?'Covered':(r.pctContract>=50?'Partial':'White space');
+  return `<tr data-cat="${r.id}">
+    <td><input type="text" data-f="name" value="${esc(r.name)}" style="width:140px;"></td>
+    <td><input type="number" data-f="spend" value="${r.spend}" style="width:110px;"></td>
+    <td><input type="number" min="0" max="100" data-f="pctContract" value="${r.pctContract}" style="width:70px;"></td>
+    <td><span class="badge ${status}">${statusLabel}</span></td>
+    <td><button class="btn danger small" data-delcat="${r.id}">✕</button></td>
+  </tr>`;
+}
+function renderFeedbackRow(r){
+  return `<tr data-fb="${r.id}">
+    <td><input type="text" data-f="subject" value="${esc(r.subject)}" style="width:120px;"></td>
+    <td><input type="text" data-f="stakeholder" value="${esc(r.stakeholder)}" style="width:100px;"></td>
+    <td><input type="date" data-f="date" value="${esc(r.date)}"></td>
+    <td><input type="number" min="1" max="5" data-f="rating" value="${r.rating}" style="width:50px;"></td>
+    <td><input type="text" data-f="comment" value="${esc(r.comment)}" style="width:180px;"></td>
+    <td><button class="btn danger small" data-delfb="${r.id}">✕</button></td>
+  </tr>`;
+}
+function renderCollabRow(r){
+  return `<tr data-collab="${r.id}">
+    <td><input type="text" data-f="supplier" value="${esc(r.supplier)}" style="width:120px;"></td>
+    <td><select data-f="type"><option ${r.type==='Joint business plan'?'selected':''}>Joint business plan</option><option ${r.type==='Innovation'?'selected':''}>Innovation</option><option ${r.type==='Gain-share'?'selected':''}>Gain-share</option><option ${r.type==='ESG/Sustainability'?'selected':''}>ESG/Sustainability</option></select></td>
+    <td><input type="text" data-f="description" value="${esc(r.description)}" style="width:180px;"></td>
+    <td><select data-f="status"><option ${r.status==='Idea'?'selected':''}>Idea</option><option ${r.status==='In progress'?'selected':''}>In progress</option><option ${r.status==='Delivered'?'selected':''}>Delivered</option></select></td>
+    <td><button class="btn danger small" data-delcollab="${r.id}">✕</button></td>
+  </tr>`;
+}
+function wireCoverage(){
+  const c = STATE.coverage;
+  document.getElementById('btnAddCategory').addEventListener('click',()=>{ c.categories.push({id:uid(),name:'',spend:0,pctContract:0}); saveState(); render(); });
+  document.getElementById('btnAddFeedback').addEventListener('click',()=>{ c.feedback.push({id:uid(),subject:'',stakeholder:'',date:'',rating:3,comment:''}); saveState(); render(); });
+  document.getElementById('btnAddCollab').addEventListener('click',()=>{ c.collaboration.push({id:uid(),supplier:'',type:'Joint business plan',description:'',status:'Idea'}); saveState(); render(); });
+
+  document.querySelectorAll('tr[data-cat]').forEach(tr=>{
+    const id = tr.dataset.cat;
+    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', e=>{
+      const row = c.categories.find(r=>r.id===id); const f=e.target.dataset.f;
+      row[f] = (f==='spend'||f==='pctContract') ? (parseFloat(e.target.value)||0) : e.target.value;
+      saveState(); render();
+    }));
+  });
+  document.querySelectorAll('[data-delcat]').forEach(b=> b.addEventListener('click',()=>{ c.categories=c.categories.filter(r=>r.id!==b.dataset.delcat); saveState(); render(); }));
+
+  document.querySelectorAll('tr[data-fb]').forEach(tr=>{
+    const id = tr.dataset.fb;
+    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', e=>{
+      const row = c.feedback.find(r=>r.id===id); const f=e.target.dataset.f;
+      row[f] = f==='rating' ? (parseInt(e.target.value)||3) : e.target.value;
+      saveState(); render();
+    }));
+  });
+  document.querySelectorAll('[data-delfb]').forEach(b=> b.addEventListener('click',()=>{ c.feedback=c.feedback.filter(r=>r.id!==b.dataset.delfb); saveState(); render(); }));
+
+  document.querySelectorAll('tr[data-collab]').forEach(tr=>{
+    const id = tr.dataset.collab;
+    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', e=>{
+      const row = c.collaboration.find(r=>r.id===id);
+      row[e.target.dataset.f] = e.target.value;
+      saveState(); render();
+    }));
+  });
+  document.querySelectorAll('[data-delcollab]').forEach(b=> b.addEventListener('click',()=>{ c.collaboration=c.collaboration.filter(r=>r.id!==b.dataset.delcollab); saveState(); render(); }));
+
+  document.getElementById('btnCatCSV').addEventListener('click',()=>{
+    exportCSV('category_coverage.csv', ['Category','Annual spend','% under contract'], c.categories.map(r=>[r.name,r.spend,r.pctContract]));
+  });
+  document.getElementById('btnFbCSV').addEventListener('click',()=>{
+    exportCSV('stakeholder_feedback.csv', ['Contract/Supplier','Stakeholder','Date','Rating','Comment'], c.feedback.map(r=>[r.subject,r.stakeholder,r.date,r.rating,r.comment]));
+  });
+  document.getElementById('btnCollabCSV').addEventListener('click',()=>{
+    exportCSV('collaboration_opportunities.csv', ['Supplier','Type','Description','Status'], c.collaboration.map(r=>[r.supplier,r.type,r.description,r.status]));
+  });
+}
+
+/* ========== REBATES ========== */
+function renderRebates(){
+  const rows = STATE.rebates;
+  const totalAccrued = rows.reduce((a,r)=> a + (Number(r.spendToDate)||0)*(Number(r.ratePct)||0)/100, 0);
+  const openCount = rows.filter(r=>r.status!=='Reconciled').length;
+  return `
+  <h2>Rebate Monitoring</h2>
+  <p class="muted">Track tier thresholds against actual spend — accrued entitlement is calculated live from what you enter, not typed in separately.</p>
+  <div class="result-strip"><div><div class="eyebrow" style="color:#a39a89;">Total accrued entitlement (all tiers)</div><div class="tname">$${totalAccrued.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+    <div class="tscore small mono">${openCount} of ${rows.length} not yet reconciled</div></div>
+  <div class="card">
+    <div class="flex-between"><span class="muted small">${rows.length} tier(s)</span>
+      <div class="row">
+        <button class="btn small outline" id="btnAddRebate">+ Add tier</button>
+        <button class="btn small outline" id="btnRebateCSV">Export CSV</button>
+        <button class="btn small outline" id="btnRebateWord">Export Word</button>
+      </div>
+    </div>
+    <table style="margin-top:10px;"><thead><tr><th>Contract</th><th>Tier</th><th>Threshold</th><th>Spend to date ($)</th><th>Rate (%)</th><th>Accrued</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      ${rows.map(r=>renderRebateRow(r)).join('') || '<tr><td colspan="8" class="small muted">No rebate tiers yet — add one, or use a "+ Add starter rebate tiers" button on the Framework brief (Section 4).</td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+function renderRebateRow(r){
+  const accrued = (Number(r.spendToDate)||0)*(Number(r.ratePct)||0)/100;
+  return `<tr data-rebate="${r.id}">
+    <td><input type="text" data-f="contractName" value="${esc(r.contractName)}" style="width:110px;"></td>
+    <td><input type="text" data-f="tierName" value="${esc(r.tierName)}" style="width:70px;"></td>
+    <td><input type="text" data-f="threshold" value="${esc(r.threshold)}" style="width:140px;"></td>
+    <td><input type="number" data-f="spendToDate" value="${r.spendToDate}" style="width:100px;"></td>
+    <td><input type="number" data-f="ratePct" value="${r.ratePct}" style="width:60px;"></td>
+    <td class="mono">$${accrued.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+    <td><select data-f="status"><option ${r.status==='Open'?'selected':''}>Open</option><option ${r.status==='Reconciled'?'selected':''}>Reconciled</option><option ${r.status==='Disputed'?'selected':''}>Disputed</option></select></td>
+    <td><button class="btn danger small" data-delrebate="${r.id}">✕</button></td>
+  </tr>`;
+}
+function wireRebates(){
+  document.getElementById('btnAddRebate').addEventListener('click',()=>{
+    STATE.rebates.push({id:uid(), contractName:'', tierName:'', threshold:'', ratePct:0, spendToDate:0, status:'Open'});
+    saveState(); render();
+  });
+  document.querySelectorAll('tr[data-rebate]').forEach(tr=>{
+    const id = tr.dataset.rebate;
+    tr.querySelectorAll('[data-f]').forEach(inp=>{
+      inp.addEventListener('change', e=>{
+        const row = STATE.rebates.find(r=>r.id===id);
+        const f = e.target.dataset.f;
+        row[f] = (f==='spendToDate'||f==='ratePct') ? (parseFloat(e.target.value)||0) : e.target.value;
+        saveState(); render();
+      });
+    });
+  });
+  document.querySelectorAll('[data-delrebate]').forEach(b=>{
+    b.addEventListener('click',()=>{ STATE.rebates = STATE.rebates.filter(r=>r.id!==b.dataset.delrebate); saveState(); render(); });
+  });
+  document.getElementById('btnRebateCSV').addEventListener('click',()=>{
+    const rows = STATE.rebates.map(r=>[r.contractName,r.tierName,r.threshold,r.spendToDate,r.ratePct,((Number(r.spendToDate)||0)*(Number(r.ratePct)||0)/100).toFixed(0),r.status]);
+    exportCSV('rebate_tracker.csv', ['Contract','Tier','Threshold','Spend to date','Rate %','Accrued','Status'], rows);
+  });
+  document.getElementById('btnRebateWord').addEventListener('click',()=>{
+    const rows = STATE.rebates.map(r=>[r.contractName,r.tierName,r.threshold,'$'+r.spendToDate,r.ratePct+'%','$'+((Number(r.spendToDate)||0)*(Number(r.ratePct)||0)/100).toFixed(0),r.status]);
+    exportDocxReal('Rebate Tracker', [{table:{headers:['Contract','Tier','Threshold','Spend to date','Rate','Accrued','Status'], rows}}]);
+  });
+}
+
 /* ========== REGISTER ========== */
 let IMPORT_STAGING = [];
 let KPI_STAGING = [];
 let IMPORT_RAW_TEXT = '';
 let IMPORT_FILE_NAME = '';
 let SUGGESTED_TIER = null;
+let IMPORT_STATUS_MSG = '';
+let IMPORT_TRUNC_NOTE = '';
 function renderRegister(){
   const rows = STATE.register;
   return `
-  <h2>Obligation / SLA Register</h2>
+  <h2>Obligation / SLA / Change Order Register</h2>
   <div class="card">
     <div class="flex-between"><span class="muted small">${rows.length} item(s)</span>
       <div class="row">
@@ -805,6 +1168,10 @@ function renderRegister(){
     <h3>Import obligations from a Word or PDF contract</h3>
     <p class="small muted">Reads a .docx or .pdf contract, scans for obligation/SLA-style clauses, and suggests a Section 0 tier from the same text — all staged for your review before anything is added.</p>
     <div class="field"><input type="file" id="regImportFile" accept=".docx,.pdf"></div>
+    <div id="regImportStatusHost">${(IMPORT_STATUS_MSG || IMPORT_TRUNC_NOTE) ? collapsibleBanner('regImportStatus',
+      IMPORT_TRUNC_NOTE ? '⚠ Import notice' : 'Import notice',
+      `${IMPORT_STATUS_MSG?`<p style="margin:0 0 6px;">${IMPORT_STATUS_MSG}</p>`:''}${IMPORT_TRUNC_NOTE?`<p style="margin:0;color:var(--amber);">${esc(IMPORT_TRUNC_NOTE)}</p>`:''}`,
+      {amber: !!IMPORT_TRUNC_NOTE, defaultOpen:true}) : ''}</div>
     <div id="regImportStatus" class="small muted"></div>
     ${SUGGESTED_TIER ? `
       <hr class="divider">
@@ -856,7 +1223,7 @@ function statusBadge(row){
 }
 function renderRegRow(r){
   return `<tr data-reg="${r.id}">
-    <td><select data-f="type"><option ${r.type==='Obligation'?'selected':''}>Obligation</option><option ${r.type==='SLA'?'selected':''}>SLA</option></select></td>
+    <td><select data-f="type"><option ${r.type==='Obligation'?'selected':''}>Obligation</option><option ${r.type==='SLA'?'selected':''}>SLA</option><option ${r.type==='Change Order'?'selected':''}>Change Order</option></select></td>
     <td><input type="text" data-f="description" value="${esc(r.description)}" style="width:180px;"></td>
     <td><input type="text" data-f="owner" value="${esc(r.owner)}" style="width:100px;"></td>
     <td><input type="date" data-f="dueDate" value="${esc(r.dueDate)}"></td>
@@ -905,19 +1272,31 @@ function renderGovernance(){
   SCORECARD_QUESTIONS.forEach(q=>{ dims[q.dim]=dims[q.dim]||[]; dims[q.dim].push(STATE.scorecard[q.id]||3); });
   const dimAvg = Object.keys(dims).map(d=>({dim:d, avg: dims[d].reduce((a,b)=>a+b,0)/dims[d].length}));
   const weakest = [...dimAvg].sort((a,b)=>a.avg-b.avg).slice(0,3);
+  const rebates = STATE.rebates;
+  const totalAccrued = rebates.reduce((a,r)=>a+(Number(r.spendToDate)||0)*(Number(r.ratePct)||0)/100,0);
+  const unreconciled = rebates.filter(r=>r.status!=='Reconciled').length;
+  const cats = STATE.coverage.categories;
+  const totalSpend = cats.reduce((a,r)=>a+(Number(r.spend)||0),0);
+  const weightedCovered = cats.reduce((a,r)=>a+(Number(r.spend)||0)*(Number(r.pctContract)||0)/100,0);
+  const overallCoveragePct = totalSpend ? (weightedCovered/totalSpend*100) : 0;
+  const whiteSpace = cats.filter(r=>(Number(r.pctContract)||0)<50);
 
   return `
   <h2>Governance View — CPO Rollup</h2>
-  <p class="muted">Live, computed from Tiering, Register and Scorecard tabs — the value-leak view.</p>
+  ${collapsibleBanner('govTools', '📄 Reports', `<div class="row">
+      <button class="btn gold" id="btnGovExport">Export governance report to Word</button>
+      <button class="btn outline" id="btnGovExportPpt">Export CPO deck to PowerPoint</button>
+    </div>`, {sticky:true})}
+  <p class="muted">Live, computed from Tiering, Register, Rebates, Coverage and Scorecard tabs — the value-leak view.</p>
   <div class="grid2">
     <div class="card">
-      <h3>Contract tier mix (test set, n=${bulk.length})</h3>
-      ${buckets.map(b=>{
-        const pct = bulk.length? Math.round(b.count/bulk.length*100):0;
-        return `<div style="margin-bottom:8px;"><div class="flex-between small"><span>${b.label}</span><span class="mono">${b.count} (${pct}%)</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--${b.cls==='gold'?'gold':b.cls==='silver'?'slate':b.cls==='bronze'?'amber':b.cls});"></div></div></div>`;
-      }).join('')}
-      ${bulk.length? '' : '<p class="small muted">Add contracts on the Tiering tab to populate this.</p>'}
+      <h3>Spend under contract & rebate exposure</h3>
+      <div style="margin-bottom:10px;"><div class="flex-between small"><span>Spend under active contract</span><span class="mono">${overallCoveragePct.toFixed(0)}%</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${overallCoveragePct}%;background:var(--green);"></div></div></div>
+      <p class="small">${whiteSpace.length} categor${whiteSpace.length===1?'y':'ies'} under 50% coverage (white space).</p>
+      <hr class="divider">
+      <p style="font-size:22px;font-family:'IBM Plex Mono',monospace;margin:4px 0;">$${totalAccrued.toLocaleString(undefined,{maximumFractionDigits:0})}</p>
+      <p class="small muted">accrued rebate entitlement — ${unreconciled} of ${rebates.length} tier(s) not yet reconciled</p>
     </div>
     <div class="card">
       <h3>Obligation/SLA exposure</h3>
@@ -927,13 +1306,20 @@ function renderGovernance(){
     </div>
   </div>
   <div class="card">
+    <h3>Contract tier mix (test set, n=${bulk.length})</h3>
+    ${buckets.map(b=>{
+      const pct = bulk.length? Math.round(b.count/bulk.length*100):0;
+      return `<div style="margin-bottom:8px;"><div class="flex-between small"><span>${b.label}</span><span class="mono">${b.count} (${pct}%)</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--${b.cls==='gold'?'gold':b.cls==='silver'?'slate':b.cls==='bronze'?'amber':b.cls});"></div></div></div>`;
+    }).join('')}
+    ${bulk.length? '' : '<p class="small muted">Add contracts on the Tiering tab to populate this.</p>'}
+  </div>
+  <div class="card">
     <h3>Maturity — weakest dimensions</h3>
     ${weakest.map(w=>`<div style="margin-bottom:8px;"><div class="flex-between small"><span>${esc(w.dim)}</span><span class="mono">${w.avg.toFixed(1)} / 5</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${w.avg/5*100}%;background:var(--amber);"></div></div></div>`).join('')}
     <p class="small muted">Full detail on the Maturity tab.</p>
-  </div>
-  <div class="row"><button class="btn gold" id="btnGovExport">Export governance report to Word</button>
-  <button class="btn outline" id="btnGovExportPpt">Export CPO deck to PowerPoint</button></div>`;
+  </div>`;
 }
 
 /* ========== SETTINGS ========== */
@@ -999,7 +1385,9 @@ function wireScreen(screen){
   if(screen==='tiering') wireTiering();
   if(screen==='framework') wireFramework();
   if(screen==='qbr') wireQBR();
+  if(screen==='rebates') wireRebates();
   if(screen==='register') wireRegister();
+  if(screen==='coverage') wireCoverage();
   if(screen==='scorecard') wireScorecard();
   if(screen==='governance') wireGovernance();
   if(screen==='settings') wireSettings();
@@ -1061,6 +1449,15 @@ function wireTiering(){
 }
 
 function wireFramework(){
+  document.querySelectorAll('[data-qaclick]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const idx = parseInt(btn.dataset.qaclick);
+      applyQuickAdd(FRAMEWORK_QUICKADD[idx]);
+      const status = document.getElementById('qaStatus'+idx);
+      if(status) status.textContent = ' Added ✓';
+      btn.disabled = true;
+    });
+  });
   document.getElementById('btnFwSummary').addEventListener('click', async ()=>{
     const out = document.getElementById('fwSummaryOut');
     out.innerHTML = '<p class="small muted">Drafting…</p>';
@@ -1082,6 +1479,20 @@ function wireFramework(){
 
 function wireQBR(){
   const q = STATE.qbr;
+  const stdBtn = document.getElementById('btnStandardizeNames');
+  if(stdBtn) stdBtn.addEventListener('click',()=>{
+    const fb = getFeedbackForSupplier(q.supplier);
+    fb.matches.forEach(f=>{ f.subject = q.supplier; });
+    saveState(); render();
+  });
+  const fbBtn = document.getElementById('btnQbrAddFeedback');
+  if(fbBtn) fbBtn.addEventListener('click',()=>{
+    const stakeholder = document.getElementById('qbrFbStakeholder').value;
+    const rating = parseInt(document.getElementById('qbrFbRating').value)||3;
+    const comment = document.getElementById('qbrFbComment').value;
+    STATE.coverage.feedback.push({id:uid(), subject:q.supplier, stakeholder, date:new Date().toISOString().slice(0,10), rating, comment});
+    saveState(); render();
+  });
   document.getElementById('qbrSupplier').addEventListener('input',e=>{ q.supplier=e.target.value; saveState(); });
   document.getElementById('qbrPeriod').addEventListener('input',e=>{ q.period=e.target.value; saveState(); });
   document.getElementById('qbrRebates').addEventListener('input',e=>{ q.rebates=e.target.value; saveState(); });
@@ -1117,13 +1528,20 @@ function wireQBR(){
   document.getElementById('btnQbrDraft').addEventListener('click', async ()=>{
     const kpiSum = q.kpis.map(k=>`${k.name}: target ${k.target}, actual ${k.actual}, ${k.status}`).join('; ');
     const slaSum = q.slas.map(k=>`${k.name}: target ${k.target}, actual ${k.actual}, ${k.status}`).join('; ');
-    const prompt = `Draft a concise QBR narrative for supplier "${q.supplier}" for period "${q.period}". KPIs: ${kpiSum||'none logged'}. SLAs: ${slaSum||'none logged'}. Rebates: ${q.rebates||'none noted'}. Risks: ${q.risks||'none noted'}. Actions: ${q.actions||'none noted'}. Write 4 short paragraphs: performance summary, risk/rebate position, recommended actions, relationship outlook.`;
+    const feedback = getFeedbackForSupplier(q.supplier).matches;
+    const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length).toFixed(1) : null;
+    const feedbackSum = feedback.length
+      ? `Stakeholder feedback: average rating ${avgRating}/5 across ${feedback.length} entr${feedback.length===1?'y':'ies'}. Recent comments: ${feedback.slice(0,5).map(f=>`"${f.comment}" (${f.stakeholder||'unnamed'}, ${f.rating}/5)`).join('; ')}`
+      : 'Stakeholder feedback: none logged yet.';
+    const prompt = `Draft a concise QBR narrative for supplier "${q.supplier}" for period "${q.period}". KPIs: ${kpiSum||'none logged'}. SLAs: ${slaSum||'none logged'}. Rebates: ${q.rebates||'none noted'}. Risks: ${q.risks||'none noted'}. Actions: ${q.actions||'none noted'}. ${feedbackSum}. Write 4 short paragraphs: performance summary, risk/rebate position, recommended actions, relationship outlook — ground the relationship outlook paragraph specifically in the stakeholder feedback given, not just KPI/SLA performance.`;
     try{
       const text = await askAI(prompt);
       q.narrative = text; saveState(); render();
     }catch(e){ alert(e.message); }
   });
   document.getElementById('btnQbrExport').addEventListener('click',()=>{
+    const feedback = getFeedbackForSupplier(q.supplier).matches;
+    const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length).toFixed(1) : null;
     const blocks = [
       {p:'Supplier: '+(q.supplier||'—')+'   Period: '+(q.period||'—')},
       {h:2,text:'KPIs'},
@@ -1133,16 +1551,22 @@ function wireQBR(){
       {h:2,text:'Rebates'},{p:q.rebates||'—'},
       {h:2,text:'Risks'},{p:q.risks||'—'},
       {h:2,text:'Actions'},{p:q.actions||'—'},
+      {h:2,text:'Stakeholder feedback'},
+      {p: feedback.length ? `Average rating ${avgRating}/5 across ${feedback.length} entr${feedback.length===1?'y':'ies'}.` : 'No feedback logged for this supplier.'},
+      {table:{headers:['Stakeholder','Date','Rating','Comment'], rows:feedback.map(f=>[f.stakeholder,f.date,f.rating,f.comment])}},
       {h:2,text:'Narrative'},{p:q.narrative||'—'}
     ];
     exportDocxReal('QBR — '+(q.supplier||'Supplier')+' '+(q.period||''), blocks);
   });
   document.getElementById('btnQbrExportPpt').addEventListener('click',()=>{
+    const feedback = getFeedbackForSupplier(q.supplier).matches;
+    const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length).toFixed(1) : null;
     const slides = [
       {title:(q.supplier||'Supplier')+' — QBR '+(q.period||''), bullets:['Prepared by CLM Suite','Review period: '+(q.period||'—')]},
       {title:'KPI performance', table:{headers:['KPI','Target','Actual','Status'], rows:q.kpis.map(k=>[k.name,k.target,k.actual,k.status])}},
       {title:'SLA performance', table:{headers:['SLA','Target','Actual','Status'], rows:q.slas.map(k=>[k.name,k.target,k.actual,k.status])}},
       {title:'Rebates, risks & actions', bullets:[('Rebates: '+(q.rebates||'—')), ('Risks: '+(q.risks||'—')), ('Actions: '+(q.actions||'—'))]},
+      {title:'Stakeholder feedback', bullets: feedback.length ? [`Average rating: ${avgRating}/5 (${feedback.length} entries)`, ...feedback.slice(0,5).map(f=>`${f.stakeholder||'Unnamed'} (${f.rating}/5): ${f.comment}`)] : ['No feedback logged for this supplier.']},
       {title:'Narrative summary', bullets:(q.narrative||'—').split('\n').filter(Boolean).slice(0,8)}
     ];
     exportPptxReal('QBR — '+(q.supplier||'Supplier')+' '+(q.period||''), slides);
@@ -1205,9 +1629,13 @@ function wireRegister(){
       IMPORT_STAGING = extractObligationCandidates(text);
       KPI_STAGING = extractKpiSlaCandidates(text);
       SUGGESTED_TIER = heuristicTierFromText(text);
-      status.innerHTML = ((IMPORT_STAGING.length || KPI_STAGING.length) ? '' : 'No obligation or KPI/SLA-style clauses matched by keyword scan — try "Refine with AI" or add items manually.') + (truncNote ? `<br><span style="color:var(--amber);">${esc(truncNote)}</span>` : '');
+      IMPORT_STATUS_MSG = (IMPORT_STAGING.length || KPI_STAGING.length) ? '' : 'No obligation or KPI/SLA-style clauses matched by keyword scan — try "Refine with AI" or add items manually.';
+      IMPORT_TRUNC_NOTE = truncNote;
+      BANNER_STATE['regImportStatus'] = true; // ensure a fresh import notice is shown open, not left collapsed from a prior file
       render();
     }catch(err){
+      IMPORT_STATUS_MSG = '';
+      IMPORT_TRUNC_NOTE = '';
       status.innerHTML = `<span style="color:var(--red);">${esc(err.message)}</span>`;
     }
   });
@@ -1431,6 +1859,25 @@ const TOUR = [
   {screen:'settings', text:'Connect Claude or Gemini here for live AI drafting, or stay in Sandbox mode offline. That\u2019s the tour — explore freely from here.'}
 ];
 let tourIndex = -1;
+let TOUR_POS = null;
+let TOUR_COLLAPSED = false;
+let dragState = {dragging:false, offX:0, offY:0};
+document.addEventListener('mousemove', e=>{
+  if(!dragState.dragging) return;
+  TOUR_POS = { left: e.clientX-dragState.offX, top: e.clientY-dragState.offY };
+  const ov = document.getElementById('tourOverlay');
+  if(ov){ ov.style.left=TOUR_POS.left+'px'; ov.style.top=TOUR_POS.top+'px'; ov.style.right='auto'; ov.style.bottom='auto'; ov.style.justifyContent='flex-start'; }
+});
+document.addEventListener('mouseup', ()=>{ dragState.dragging=false; });
+function makeDraggable(card){
+  const handle = card.querySelector('#tourDragHandle') || card;
+  handle.addEventListener('mousedown', e=>{
+    dragState.dragging = true;
+    const rect = card.getBoundingClientRect();
+    dragState.offX = e.clientX - rect.left; dragState.offY = e.clientY - rect.top;
+    e.preventDefault();
+  });
+}
 function startDemoTour(){
   if(STATE.tieringBulk.length===0){
     STATE.tieringBulk = [
@@ -1441,6 +1888,7 @@ function startDemoTour(){
     ];
     saveState();
   }
+  TOUR_POS = null; TOUR_COLLAPSED = false;
   tourIndex = 0;
   showTourStep();
 }
@@ -1453,8 +1901,26 @@ function showTourStep(){
 function renderTourOverlay(step){
   let ov = document.getElementById('tourOverlay');
   if(!ov){ ov = document.createElement('div'); ov.id='tourOverlay'; document.body.appendChild(ov); }
+  if(TOUR_POS){
+    ov.style.left = TOUR_POS.left+'px'; ov.style.top = TOUR_POS.top+'px';
+    ov.style.right = 'auto'; ov.style.bottom = 'auto'; ov.style.justifyContent = 'flex-start';
+  }else{
+    ov.style.left=''; ov.style.top=''; ov.style.right=''; ov.style.bottom=''; ov.style.justifyContent='';
+  }
+  if(TOUR_COLLAPSED){
+    ov.innerHTML = `<div id="tourCard" class="collapsed">
+      <span class="small mono">TOUR ${tourIndex+1}/${TOUR.length}</span>
+      <button class="btn small gold" id="tourExpand">Show</button>
+    </div>`;
+    document.getElementById('tourExpand').addEventListener('click',()=>{ TOUR_COLLAPSED=false; renderTourOverlay(step); });
+    makeDraggable(document.getElementById('tourCard'));
+    return;
+  }
   ov.innerHTML = `<div id="tourCard">
-    <div class="small mono">GUIDED TOUR · ${tourIndex+1}/${TOUR.length}</div>
+    <div id="tourDragHandle" class="row" style="justify-content:space-between;align-items:center;cursor:move;">
+      <span class="small mono">GUIDED TOUR · ${tourIndex+1}/${TOUR.length} <span style="opacity:.6;">(drag to move)</span></span>
+      <button class="btn small" id="tourMinimize" style="background:none;border:1px solid #4a5361;color:#c9c2b4;padding:2px 9px;">Hide</button>
+    </div>
     <p style="margin:8px 0 14px;font-size:14px;line-height:1.5;">${esc(step.text)}</p>
     <div class="row">
       <button class="btn small outline" id="tourPrev" ${tourIndex===0?'disabled':''} style="color:var(--paper);border-color:#4a5361;">Back</button>
@@ -1465,9 +1931,12 @@ function renderTourOverlay(step){
   document.getElementById('tourNext').addEventListener('click',()=>{ tourIndex++; showTourStep(); });
   document.getElementById('tourPrev').addEventListener('click',()=>{ tourIndex--; showTourStep(); });
   document.getElementById('tourSkip').addEventListener('click', endTour);
+  document.getElementById('tourMinimize').addEventListener('click',()=>{ TOUR_COLLAPSED=true; renderTourOverlay(step); });
+  makeDraggable(document.getElementById('tourCard'));
 }
 function endTour(){
   tourIndex = -1;
+  TOUR_POS = null; TOUR_COLLAPSED = false;
   const ov = document.getElementById('tourOverlay');
   if(ov) ov.remove();
 }
@@ -1476,6 +1945,7 @@ document.addEventListener('click', e=>{
 });
 
 render();
+renderFloaterTips();
 </script>
 </body>
 </html>
