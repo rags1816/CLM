@@ -134,7 +134,7 @@
 
 /* ---------- constants ---------- */
 /* ---------- version (single source of truth — bump this, nothing else) ---------- */
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 
 const SCREENS = [
   {id:'about', label:'About'},
@@ -1650,6 +1650,7 @@ function renderSettings(){
     <h3>Data & devices</h3>
     <p class="small muted">One browser, one device = one private workspace (localStorage). No sync. Use Export buttons on each tab to hand off work.</p>
     <button class="btn danger small" id="btnResetAll">Reset all local data</button>
+    <button class="btn outline small" id="btnLoadDemo" style="margin-left:8px;">Reload demo data (3 suppliers)</button>
   </div>`;
 }
 
@@ -2202,6 +2203,14 @@ function wireSettings(){
       render();
     }
   });
+  document.getElementById('btnLoadDemo').addEventListener('click',()=>{
+    if(hasNonDemoData()){
+      const ok = confirm('This will REPLACE your current Tiering, Register, Rebates, Coverage, QBR and Scorecard data with the 3-supplier demo dataset — export anything you want to keep first.\n\nReplace with demo data?');
+      if(!ok) return;
+    }
+    loadDemoData();
+    render();
+  });
 }
 
 /* ---------- floater ---------- */
@@ -2258,62 +2267,72 @@ function makeDraggable(card){
     startDrag(t.clientX, t.clientY, card);
   }, {passive:true});
 }
+function loadDemoData(){
+  const days = n => new Date(Date.now()+n*86400000).toISOString().slice(0,10);
+  STATE.tieringBulk = [
+    {id:uid(),name:'Global Logistics Co',value:5,risk:4,criticality:5,impact:4},
+    {id:uid(),name:'Meridian Cloud Hosting',value:3,risk:3,criticality:4,impact:3},
+    {id:uid(),name:'Apex Office Supplies',value:1,risk:2,criticality:1,impact:1}
+  ];
+  STATE.register = [
+    {id:uid(),type:'SLA',contract:'Global Logistics Co',description:'On-time delivery must be ≥98% of scheduled loads',owner:'Ops',dueDate:days(-10),recurrence:'Monthly',status:'Open'},
+    {id:uid(),type:'Obligation',contract:'Global Logistics Co',description:'Insurance certificate renewal — annual',owner:'Procurement',dueDate:days(20),recurrence:'Annual',status:'Open'},
+    {id:uid(),type:'Change Order',contract:'Global Logistics Co',description:'Fuel surcharge pricing amendment',owner:'Procurement',dueDate:days(45),recurrence:'One-off',status:'Open'},
+    {id:uid(),type:'SLA',contract:'Meridian Cloud Hosting',description:'System uptime must be ≥99.9%',owner:'IT',dueDate:days(5),recurrence:'Monthly',status:'Open'},
+    {id:uid(),type:'Obligation',contract:'Meridian Cloud Hosting',description:'Annual SOC2 audit report submission',owner:'IT',dueDate:days(60),recurrence:'Annual',status:'Open'},
+    {id:uid(),type:'Obligation',contract:'Apex Office Supplies',description:'Catalogue price list annual refresh',owner:'Procurement',dueDate:days(90),recurrence:'Annual',status:'Open'}
+  ];
+  STATE.rebates = [
+    {id:uid(),contractName:'Global Logistics Co',tierName:'Tier 2',threshold:'$500,001 – $1,000,000',ratePct:2,spendToDate:720000,status:'Open'},
+    {id:uid(),contractName:'Meridian Cloud Hosting',tierName:'Volume rebate',threshold:'>$250,000 annual',ratePct:3,spendToDate:410000,status:'Disputed'}
+  ];
+  STATE.coverage = {
+    categories:[
+      {id:uid(),name:'Logistics & Freight',spend:1200000,pctContract:85},
+      {id:uid(),name:'IT & Cloud Services',spend:900000,pctContract:60},
+      {id:uid(),name:'Office Supplies',spend:150000,pctContract:40},
+      {id:uid(),name:'Facilities',spend:300000,pctContract:20}
+    ],
+    feedback:[
+      {id:uid(),subject:'Global Logistics Co',stakeholder:'James (Ops Director)',date:days(-14),rating:4,comment:'Reliable overall, but the fuel surcharge change was communicated late.'},
+      {id:uid(),subject:'Global Logistics Co',stakeholder:'Priya (Warehouse Lead)',date:days(-7),rating:5,comment:'Excellent on-time performance this quarter.'},
+      {id:uid(),subject:'Meridian Cloud Hosting',stakeholder:'Alex (IT Manager)',date:days(-20),rating:2,comment:'Uptime dipped twice this quarter and support response was slow.'},
+      {id:uid(),subject:'Apex Office Supplies',stakeholder:'Dana (Office Manager)',date:days(-5),rating:4,comment:'Good value, occasional stock-outs on paper.'}
+    ],
+    collaboration:[
+      {id:uid(),supplier:'Global Logistics Co',type:'Joint business plan',description:'Explore regional consolidation to cut empty-mile costs.',status:'In progress'},
+      {id:uid(),supplier:'Meridian Cloud Hosting',type:'Innovation',description:'Pilot AI-based auto-scaling to reduce compute spend.',status:'Idea'}
+    ]
+  };
+  STATE.qbr = {
+    supplier:'Global Logistics Co', period:'Q3 FY26',
+    kpis:[
+      {id:uid(),name:'On-time delivery',target:'98%',actual:'95%',status:'At risk'},
+      {id:uid(),name:'Damage / defect rate',target:'<1%',actual:'0.6%',status:'On track'}
+    ],
+    slas:[
+      {id:uid(),name:'Incident response time',target:'4 hours',actual:'6 hours',status:'Breached'},
+      {id:uid(),name:'Tracking system uptime',target:'99.5%',actual:'99.7%',status:'On track'}
+    ],
+    rebates:'Tier 2 volume rebate tracking at 2% — see Rebates tab for live accrual.',
+    risks:'Fuel surcharge pass-through communicated late last cycle; single-source risk on the Northeast lane.',
+    actions:'Agree 30-day advance notice for surcharge changes; scope a backup carrier for the Northeast lane.',
+    narrative:'', recommendations:''
+  };
+  STATE.scorecard = {d1:4,d2:3,d3:3,d4:2,d5:4,d6:3,d7:2,d8:2,d9:4,d10:3,d11:4,d12:3,d13:3,d14:2,d15:3};
+  saveState();
+}
+function hasNonDemoData(){
+  return STATE.tieringBulk.length>0 || STATE.register.length>0 || STATE.rebates.length>0 ||
+    STATE.coverage.categories.length>0 || STATE.coverage.feedback.length>0 || STATE.coverage.collaboration.length>0 ||
+    !!STATE.qbr.supplier || Object.keys(STATE.scorecard).length>0;
+}
 function startDemoTour(){
-  if(STATE.tieringBulk.length===0){
-    const days = n => new Date(Date.now()+n*86400000).toISOString().slice(0,10);
-    STATE.tieringBulk = [
-      {id:uid(),name:'Global Logistics Co',value:5,risk:4,criticality:5,impact:4},
-      {id:uid(),name:'Meridian Cloud Hosting',value:3,risk:3,criticality:4,impact:3},
-      {id:uid(),name:'Apex Office Supplies',value:1,risk:2,criticality:1,impact:1}
-    ];
-    STATE.register = [
-      {id:uid(),type:'SLA',contract:'Global Logistics Co',description:'On-time delivery must be ≥98% of scheduled loads',owner:'Ops',dueDate:days(-10),recurrence:'Monthly',status:'Open'},
-      {id:uid(),type:'Obligation',contract:'Global Logistics Co',description:'Insurance certificate renewal — annual',owner:'Procurement',dueDate:days(20),recurrence:'Annual',status:'Open'},
-      {id:uid(),type:'Change Order',contract:'Global Logistics Co',description:'Fuel surcharge pricing amendment',owner:'Procurement',dueDate:days(45),recurrence:'One-off',status:'Open'},
-      {id:uid(),type:'SLA',contract:'Meridian Cloud Hosting',description:'System uptime must be ≥99.9%',owner:'IT',dueDate:days(5),recurrence:'Monthly',status:'Open'},
-      {id:uid(),type:'Obligation',contract:'Meridian Cloud Hosting',description:'Annual SOC2 audit report submission',owner:'IT',dueDate:days(60),recurrence:'Annual',status:'Open'},
-      {id:uid(),type:'Obligation',contract:'Apex Office Supplies',description:'Catalogue price list annual refresh',owner:'Procurement',dueDate:days(90),recurrence:'Annual',status:'Open'}
-    ];
-    STATE.rebates = [
-      {id:uid(),contractName:'Global Logistics Co',tierName:'Tier 2',threshold:'$500,001 – $1,000,000',ratePct:2,spendToDate:720000,status:'Open'},
-      {id:uid(),contractName:'Meridian Cloud Hosting',tierName:'Volume rebate',threshold:'>$250,000 annual',ratePct:3,spendToDate:410000,status:'Disputed'}
-    ];
-    STATE.coverage = {
-      categories:[
-        {id:uid(),name:'Logistics & Freight',spend:1200000,pctContract:85},
-        {id:uid(),name:'IT & Cloud Services',spend:900000,pctContract:60},
-        {id:uid(),name:'Office Supplies',spend:150000,pctContract:40},
-        {id:uid(),name:'Facilities',spend:300000,pctContract:20}
-      ],
-      feedback:[
-        {id:uid(),subject:'Global Logistics Co',stakeholder:'James (Ops Director)',date:days(-14),rating:4,comment:'Reliable overall, but the fuel surcharge change was communicated late.'},
-        {id:uid(),subject:'Global Logistics Co',stakeholder:'Priya (Warehouse Lead)',date:days(-7),rating:5,comment:'Excellent on-time performance this quarter.'},
-        {id:uid(),subject:'Meridian Cloud Hosting',stakeholder:'Alex (IT Manager)',date:days(-20),rating:2,comment:'Uptime dipped twice this quarter and support response was slow.'},
-        {id:uid(),subject:'Apex Office Supplies',stakeholder:'Dana (Office Manager)',date:days(-5),rating:4,comment:'Good value, occasional stock-outs on paper.'}
-      ],
-      collaboration:[
-        {id:uid(),supplier:'Global Logistics Co',type:'Joint business plan',description:'Explore regional consolidation to cut empty-mile costs.',status:'In progress'},
-        {id:uid(),supplier:'Meridian Cloud Hosting',type:'Innovation',description:'Pilot AI-based auto-scaling to reduce compute spend.',status:'Idea'}
-      ]
-    };
-    STATE.qbr = {
-      supplier:'Global Logistics Co', period:'Q3 FY26',
-      kpis:[
-        {id:uid(),name:'On-time delivery',target:'98%',actual:'95%',status:'At risk'},
-        {id:uid(),name:'Damage / defect rate',target:'<1%',actual:'0.6%',status:'On track'}
-      ],
-      slas:[
-        {id:uid(),name:'Incident response time',target:'4 hours',actual:'6 hours',status:'Breached'},
-        {id:uid(),name:'Tracking system uptime',target:'99.5%',actual:'99.7%',status:'On track'}
-      ],
-      rebates:'Tier 2 volume rebate tracking at 2% — see Rebates tab for live accrual.',
-      risks:'Fuel surcharge pass-through communicated late last cycle; single-source risk on the Northeast lane.',
-      actions:'Agree 30-day advance notice for surcharge changes; scope a backup carrier for the Northeast lane.',
-      narrative:'', recommendations:''
-    };
-    STATE.scorecard = {d1:4,d2:3,d3:3,d4:2,d5:4,d6:3,d7:2,d8:2,d9:4,d10:3,d11:4,d12:3,d13:3,d14:2,d15:3};
-    saveState();
+  if(hasNonDemoData()){
+    const ok = confirm('The demo tour needs its own dataset (3 sample suppliers) to match what it narrates. This will REPLACE your current Tiering, Register, Rebates, Coverage, QBR and Scorecard data — export anything you want to keep first.\n\nReplace with demo data and start the tour?');
+    if(!ok) return;
   }
+  loadDemoData();
   TOUR_POS = null; TOUR_COLLAPSED = false;
   tourIndex = 0;
   showTourStep();
