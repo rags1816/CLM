@@ -1,5 +1,3 @@
-"Add a .gitignore file to this repo with the following content, then show me what would be added — don't commit or push yet:
-
 # --- Secrets / environment (never commit these) ---
 .env
 .env.local
