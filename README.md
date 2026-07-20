@@ -48,3 +48,5 @@ troubleshooting.
 
 See [`METHODOLOGY.md`](./METHODOLOGY.md) for the tiering and maturity
 frameworks this tool applies.
+
+Last verified: 2026-07-20
