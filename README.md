@@ -1,2 +1,0 @@
-# CLM
-Contract Lifecycle Management
