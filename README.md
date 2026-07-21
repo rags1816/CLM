@@ -43,7 +43,11 @@ Download and double-click `index.html` — opens in Chrome or Edge. No
 installation, no account, no login. See `USER_GUIDE.md` for a screen-by-screen
 walkthrough and `ADMIN_GUIDE.md` for deployment, AI provider setup, and
 troubleshooting.
+## Development note
 
+Development assisted by Claude Code (Anthropic) under my direction. The
+methodology, product design, and domain expertise reflected in this tool
+are my own — see `METHODOLOGY.md` for the original framework.
 ## Related
 
 See [`METHODOLOGY.md`](./METHODOLOGY.md) for the tiering and maturity
