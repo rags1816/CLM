@@ -535,7 +535,7 @@ async function ensurePdfLib(){
 async function extractTextFromPdf(arrayBuffer){
   const pdf = await window.pdfjsLib.getDocument({data:arrayBuffer}).promise;
   const totalPages = pdf.numPages;
-  const maxPages = Math.min(totalPages, 60);
+  const maxPages = Math.min(totalPages, 150);
   let text='';
   for(let i=1;i<=maxPages;i++){
     const page = await pdf.getPage(i);
@@ -669,7 +669,7 @@ async function askAI(prompt){
         if(fb==='claude') text = await askClaude(prompt);
         else if(fb==='gemini') text = await askGemini(prompt);
         else text = await sandboxAnswer(prompt);
-        return `[Primary (${mode}) failed — used fallback: ${fb}]\n\n${text}`;
+        return `[Primary (${mode}) failed: ${primaryErr.message} — used fallback: ${fb}]\n\n${text}`;
       }catch(fallbackErr){
         throw new Error(primaryErr.message+' — fallback ('+fb+') also failed: '+fallbackErr.message);
       }
@@ -920,8 +920,9 @@ function renderTiering(){
   <div class="card">
     <h3 style="margin-top:0;">Upload & Analyze Contract</h3>
     <p class="muted small">Upload a contract (.docx or .pdf) to load it as the active contract context for AI extraction and scoring.</p>
-    <div class="field" style="display:flex;gap:12px;align-items:center;">
+    <div class="field" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <input type="file" id="tierUploadFile" accept=".docx,.pdf" style="max-width:320px;">
+      <label style="display:inline-flex;align-items:center;font-weight:400;margin-bottom:0;cursor:pointer;"><input type="checkbox" id="chkAppendFile" style="width:auto;margin-right:4px;">Append to active contract</label>
       ${active ? `<span class="badge ok" style="padding: 6px 10px;">📄 Active: ${esc(STATE.activeContract.name)}</span>
        <button class="btn small danger" id="btnClearActiveContract">Clear</button>` : '<span class="small muted">No active contract loaded</span>'}
     </div>
@@ -1862,19 +1863,30 @@ function wireTiering(){
           const result = await window.mammoth.extractRawText({arrayBuffer});
           text = result.value || '';
         }
-        const maxLen = 100000;
-        if(text.length > maxLen) {
-          text = text.slice(0, maxLen);
-          truncNote = (truncNote ? truncNote + ' ' : '') + 'Truncated to 100k chars for storage efficiency.';
+        const appendMode = document.getElementById('chkAppendFile') && document.getElementById('chkAppendFile').checked;
+        const newName = file.name.replace(/\.(docx|pdf)$/i,'');
+        let combinedText = text;
+        let combinedName = newName;
+        
+        if (appendMode && STATE.activeContract && STATE.activeContract.text) {
+          combinedText = STATE.activeContract.text + `\n\n--- Document: ${newName} ---\n` + text;
+          combinedName = STATE.activeContract.name + ' + ' + newName;
         }
+
+        const maxLen = 300000; // Increased to 300k characters for at least 150 pages
+        if(combinedText.length > maxLen) {
+          combinedText = combinedText.slice(0, maxLen);
+          truncNote = (truncNote ? truncNote + ' ' : '') + 'Truncated to 300k chars for storage efficiency.';
+        }
+        
         STATE.activeContract = {
-          name: file.name.replace(/\.(docx|pdf)$/i,''),
-          text: text,
+          name: combinedName,
+          text: combinedText,
           truncNote: truncNote
         };
         
         status.textContent = 'Analyzing and auto-scoring contract...';
-        const scores = await aiSuggestTier(text);
+        const scores = await aiSuggestTier(combinedText);
         STATE.tieringSingle = scores;
         STATE.qbr.supplier = STATE.activeContract.name;
         saveState();
