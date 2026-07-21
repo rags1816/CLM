@@ -438,7 +438,9 @@ const DEFAULT_STATE = {
   rebates:[],
   coverage:{categories:[], feedback:[], collaboration:[]},
   governanceSummary:'',
-  scorecard:{}
+  scorecard:{},
+  framework:{industry:'', spend:'', maturity:'Ad hoc', summaryText:''},
+  activeContract:{name:'', text:'', truncNote:''}
 };
 let STATE = loadState();
 
@@ -689,7 +691,16 @@ async function askClaude(prompt){
     },
     body: JSON.stringify(body)
   });
-  if(!res.ok) throw new Error('Claude API error '+res.status+' — check key, or the browser may be blocking direct API calls (CORS). Try Sandbox mode.');
+  if(!res.ok) {
+    let msg = 'Claude API error ' + res.status;
+    try {
+      const errData = await res.json();
+      if (errData.error && errData.error.message) {
+        msg += ': ' + errData.error.message;
+      }
+    } catch(e) {}
+    throw new Error(msg + ' — check key, or the browser may be blocking direct API calls (CORS). Try Sandbox mode.');
+  }
   const data = await res.json();
   const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text);
   return textBlocks.length ? textBlocks.join('\n') : '(no text returned)';
@@ -703,7 +714,16 @@ async function askGemini(prompt){
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(body)
   });
-  if(!res.ok) throw new Error('Gemini API error '+res.status+' — check key.');
+  if(!res.ok) {
+    let msg = 'Gemini API error ' + res.status;
+    try {
+      const errData = await res.json();
+      if (errData.error && errData.error.message) {
+        msg += ': ' + errData.error.message;
+      }
+    } catch(e) {}
+    throw new Error(msg + ' — check key.');
+  }
   const data = await res.json();
   const parts = data.candidates?.[0]?.content?.parts || [];
   const text = parts.filter(p=>p.text).map(p=>p.text).join('\n');
@@ -894,8 +914,20 @@ function renderTiering(){
       <input type="range" min="1" max="5" step="1" value="${s[key]}" data-axis="${key}">
       <div class="small" style="display:flex;justify-content:space-between;"><span>${lo}</span><span>${hi}</span></div>
     </div>`;
+  const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>Section 0 · Pre-Contract Tiering</h2>
+  <div class="card">
+    <h3 style="margin-top:0;">Upload & Analyze Contract</h3>
+    <p class="muted small">Upload a contract (.docx or .pdf) to load it as the active contract context for AI extraction and scoring.</p>
+    <div class="field" style="display:flex;gap:12px;align-items:center;">
+      <input type="file" id="tierUploadFile" accept=".docx,.pdf" style="max-width:320px;">
+      ${active ? `<span class="badge ok" style="padding: 6px 10px;">📄 Active: ${esc(STATE.activeContract.name)}</span>
+       <button class="btn small danger" id="btnClearActiveContract">Clear</button>` : '<span class="small muted">No active contract loaded</span>'}
+    </div>
+    <div id="tierUploadStatus" class="small muted"></div>
+    ${STATE.activeContract && STATE.activeContract.truncNote ? `<p style="margin:6px 0 0;color:var(--amber);" class="small">⚠ ${esc(STATE.activeContract.truncNote)}</p>` : ''}
+  </div>
   <p class="muted">Score one contract, or paste several below to test auto-tiering across a batch.</p>
   <div class="card" style="padding:12px 16px;margin-bottom:16px;">
     <div class="row" style="align-items:center;">
@@ -989,18 +1021,23 @@ function renderBulkRow(row){
 
 /* ========== FRAMEWORK ========== */
 function renderFramework(){
+  const fw = STATE.framework || {industry:'', spend:'', maturity:'Ad hoc', summaryText:''};
   return `
   <h2>Framework Brief · Sections 0–7</h2>
   <div class="card">
     <div class="row" style="align-items:flex-end;">
-      <div class="col field" style="min-width:140px;"><label>Industry</label><input type="text" id="fwIndustry" placeholder="e.g. Manufacturing"></div>
-      <div class="col field" style="min-width:140px;"><label>Approx. managed spend</label><input type="text" id="fwSpend" placeholder="e.g. $250M"></div>
+      <div class="col field" style="min-width:140px;"><label>Industry</label><input type="text" id="fwIndustry" placeholder="e.g. Manufacturing" value="${esc(fw.industry)}"></div>
+      <div class="col field" style="min-width:140px;"><label>Approx. managed spend</label><input type="text" id="fwSpend" placeholder="e.g. $250M" value="${esc(fw.spend)}"></div>
       <div class="col field" style="min-width:140px;"><label>Current CM maturity</label>
-        <select id="fwMaturity"><option>Ad hoc</option><option>Managed</option><option>Optimised</option></select>
+        <select id="fwMaturity">
+          <option ${fw.maturity==='Ad hoc'?'selected':''}>Ad hoc</option>
+          <option ${fw.maturity==='Managed'?'selected':''}>Managed</option>
+          <option ${fw.maturity==='Optimised'?'selected':''}>Optimised</option>
+        </select>
       </div>
       <div class="col field" style="min-width:160px;"><button class="btn gold" id="btnFwSummary">AI draft executive summary</button></div>
     </div>
-    <div id="fwSummaryOut"></div>
+    <div id="fwSummaryOut">${fw.summaryText ? `<div class="card" style="white-space:pre-wrap;font-size:13.5px;">${esc(fw.summaryText)}</div>` : ''}</div>
   </div>
   <div class="card mdbody" id="fwBody">${(function(){
     let html = mdToHtmlClean(FRAMEWORK_MD);
@@ -1073,12 +1110,14 @@ function renderQBR(){
   const regMatch = getRegisterForSupplier(q.supplier);
   const rebateMatch = getRebatesForSupplier(q.supplier);
   const recs = q.supplier ? buildQbrRecommendations(q, regMatch.matches, rebateMatch.matches, feedback) : [];
+  const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>QBR Template</h2>
-  ${collapsibleBanner('qbrTools', '📄 Reports & AI draft', `<div class="row">
+  ${collapsibleBanner('qbrTools', '📄 Reports & AI tools', `<div class="row" style="align-items:center;">
       <button class="btn gold" id="btnQbrDraft">AI draft QBR narrative</button>
       <button class="btn outline" id="btnQbrExport">Export QBR to Word</button>
       <button class="btn outline" id="btnQbrExportPpt">Export QBR to PowerPoint</button>
+      ${active ? `<button class="btn gold" id="btnQbrAiExtract">AI Extract KPIs/SLAs</button>` : ''}
     </div>`, {sticky:true})}
   <div class="card">
     <div class="row">
@@ -1289,17 +1328,15 @@ function wireCoverage(){
 /* ========== REBATES ========== */
 function renderRebates(){
   const rows = STATE.rebates;
-  const totalAccrued = rows.reduce((a,r)=> a + (Number(r.spendToDate)||0)*(Number(r.ratePct)||0)/100, 0);
-  const openCount = rows.filter(r=>r.status!=='Reconciled').length;
+  const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>Rebate Monitoring</h2>
-  <p class="muted">Track tier thresholds against actual spend — accrued entitlement is calculated live from what you enter, not typed in separately.</p>
-  <div class="result-strip"><div><div class="eyebrow" style="color:#a39a89;">Total accrued entitlement (all tiers)</div><div class="tname">$${totalAccrued.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
-    <div class="tscore small mono">${openCount} of ${rows.length} not yet reconciled</div></div>
+  <p class="muted">Track tier thresholds against actual spend — accrued entitlement is calculated live from what you earn, not typed in separately.</p>
   ${rows.length ? `<div class="card"><h3>Accrued entitlement by tier</h3><div id="chartRebateBar" style="min-height:${Math.max(rows.length*30,120)}px;"></div></div>` : ''}
   <div class="card">
     <div class="flex-between"><span class="muted small">${rows.length} tier(s)</span>
-      <div class="row">
+      <div class="row" style="align-items:center;gap:6px;">
+        ${active ? `<button class="btn small gold" id="btnRebatesAiExtract">AI Extract Rebates</button>` : ''}
         <button class="btn small outline" id="btnAddRebate">+ Add tier</button>
         <button class="btn small outline" id="btnRebateCSV">Export CSV</button>
         <button class="btn small outline" id="btnRebateWord">Export Word</button>
@@ -1337,6 +1374,45 @@ function wireRebates(){
     STATE.rebates.push({id:uid(), contractName:'', tierName:'', threshold:'', ratePct:0, spendToDate:0, status:'Open'});
     saveState(); render();
   });
+
+  const rebatesAiBtn = document.getElementById('btnRebatesAiExtract');
+  if(rebatesAiBtn){
+    rebatesAiBtn.addEventListener('click', async ()=>{
+      if(!STATE.activeContract || !STATE.activeContract.text) return;
+      rebatesAiBtn.disabled = true; rebatesAiBtn.textContent = 'Extracting…';
+      
+      if (STATE.ai.mode === 'sandbox') {
+        const lower = STATE.activeContract.text.toLowerCase();
+        if (lower.includes('rebate') || lower.includes('volume discount')) {
+          STATE.rebates.push({id:uid(), contractName:STATE.activeContract.name, tierName:'Volume rebate', threshold:'>$250,000 spend', ratePct:3, spendToDate:0, status:'Open'});
+        } else {
+          alert("No rebate terms detected in contract text (offline scan).");
+        }
+        saveState();
+        render();
+        rebatesAiBtn.disabled = false; rebatesAiBtn.textContent = 'AI Extract Rebates';
+        return;
+      }
+      
+      const prompt = `Extract all volume rebate tiers, spend thresholds, and rebate rates from this contract. Return ONLY a JSON array, no commentary or markdown formatting: [{"tierName": "Tier Name (e.g. Volume Tier)", "threshold": "Threshold range (e.g. $500,001 - $1,000,000)", "ratePct": N (integer percentage, e.g. 2)}]\n\nText:\n${STATE.activeContract.text.slice(0, 6000)}`;
+      
+      try {
+        const res = await askAI(prompt);
+        const cleaned = res.replace(/```json|```/g,'').trim();
+        const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+        const parsed = JSON.parse(cleaned.slice(s,e+1));
+        
+        parsed.forEach(r => {
+          STATE.rebates.push({id:uid(), contractName:STATE.activeContract.name, tierName:r.tierName, threshold:r.threshold, ratePct:Number(r.ratePct)||0, spendToDate:0, status:'Open'});
+        });
+        saveState();
+        render();
+      } catch(err) {
+        alert("Extraction failed: " + err.message);
+      }
+      rebatesAiBtn.disabled = false; rebatesAiBtn.textContent = 'AI Extract Rebates';
+    });
+  }
   document.querySelectorAll('tr[data-rebate]').forEach(tr=>{
     const id = tr.dataset.rebate;
     tr.querySelectorAll('[data-f]').forEach(inp=>{
@@ -1374,6 +1450,23 @@ let IMPORT_STATUS_MSG = '';
 let IMPORT_TRUNC_NOTE = '';
 function renderRegister(){
   const rows = STATE.register;
+  if (STATE.activeContract && STATE.activeContract.text && IMPORT_RAW_TEXT !== STATE.activeContract.text) {
+    IMPORT_RAW_TEXT = STATE.activeContract.text;
+    IMPORT_FILE_NAME = STATE.activeContract.name;
+    IMPORT_STAGING = extractObligationCandidates(IMPORT_RAW_TEXT);
+    KPI_STAGING = extractKpiSlaCandidates(IMPORT_RAW_TEXT);
+    SUGGESTED_TIER = heuristicTierFromText(IMPORT_RAW_TEXT);
+    IMPORT_STATUS_MSG = '';
+    IMPORT_TRUNC_NOTE = STATE.activeContract.truncNote || '';
+  } else if ((!STATE.activeContract || !STATE.activeContract.text) && IMPORT_RAW_TEXT) {
+    IMPORT_RAW_TEXT = '';
+    IMPORT_FILE_NAME = '';
+    IMPORT_STAGING = [];
+    KPI_STAGING = [];
+    SUGGESTED_TIER = null;
+    IMPORT_STATUS_MSG = '';
+    IMPORT_TRUNC_NOTE = '';
+  }
   return `
   <h2>Obligation / SLA / Change Order Register</h2>
   <div class="card">
@@ -1386,54 +1479,57 @@ function renderRegister(){
     </div>
     <table style="margin-top:10px;"><thead><tr><th>Type</th><th>Contract/Supplier</th><th>Description</th><th>Owner</th><th>Due</th><th>Recurrence</th><th>Status</th><th></th></tr></thead>
     <tbody id="regBody">
-      ${rows.map(r=>renderRegRow(r)).join('') || '<tr><td colspan="8" class="small muted">No items yet — add an obligation or SLA above, or import from a Word contract below.</td></tr>'}
+      ${rows.map(r=>renderRegRow(r)).join('') || '<tr><td colspan="8" class="small muted">No items yet — add an obligation or SLA above, or upload a contract on the Tiering tab (Step 0) to extract obligations.</td></tr>'}
     </tbody></table>
   </div>
   <div class="card">
-    <h3>Import obligations from a Word or PDF contract</h3>
-    <p class="small muted">Reads a .docx or .pdf contract, scans for obligation/SLA-style clauses, and suggests a Section 0 tier from the same text — all staged for your review before anything is added.</p>
-    <div class="field"><input type="file" id="regImportFile" accept=".docx,.pdf"></div>
-    <div id="regImportStatusHost">${(IMPORT_STATUS_MSG || IMPORT_TRUNC_NOTE) ? collapsibleBanner('regImportStatus',
-      IMPORT_TRUNC_NOTE ? '⚠ Import notice' : 'Import notice',
-      `${IMPORT_STATUS_MSG?`<p style="margin:0 0 6px;">${IMPORT_STATUS_MSG}</p>`:''}${IMPORT_TRUNC_NOTE?`<p style="margin:0;color:var(--amber);">${esc(IMPORT_TRUNC_NOTE)}</p>`:''}`,
-      {amber: !!IMPORT_TRUNC_NOTE, defaultOpen:true}) : ''}</div>
-    <div id="regImportStatus" class="small muted"></div>
-    ${SUGGESTED_TIER ? `
-      <hr class="divider">
-      <div class="flex-between"><h4 style="margin:0;font-size:13.5px;">Suggested tiering for "${esc(IMPORT_FILE_NAME||'imported contract')}"</h4>
-        <div class="row">
-          <button class="btn small outline" id="btnRefineTierAi">Refine with AI</button>
-          <button class="btn small gold" id="btnAddSuggestedTier">Add to portfolio tiering</button>
+    <h3>Contract Analysis & Staging</h3>
+    ${STATE.activeContract && STATE.activeContract.name ? `
+      <p class="small muted">Active contract: <b>${esc(STATE.activeContract.name)}</b> (uploaded at Step 0). Check the candidate clauses below to stage them into the register.</p>
+      <div id="regImportStatusHost">${(IMPORT_STATUS_MSG || IMPORT_TRUNC_NOTE) ? collapsibleBanner('regImportStatus',
+        IMPORT_TRUNC_NOTE ? '⚠ Import notice' : 'Import notice',
+        `${IMPORT_STATUS_MSG?`<p style="margin:0 0 6px;">${IMPORT_STATUS_MSG}</p>`:''}${IMPORT_TRUNC_NOTE?`<p style="margin:0;color:var(--amber);">${esc(IMPORT_TRUNC_NOTE)}</p>`:''}`,
+        {amber: !!IMPORT_TRUNC_NOTE, defaultOpen:true}) : ''}</div>
+      <div id="regImportStatus" class="small muted"></div>
+      ${SUGGESTED_TIER ? `
+        <hr class="divider">
+        <div class="flex-between"><h4 style="margin:0;font-size:13.5px;">Suggested tiering for "${esc(IMPORT_FILE_NAME||'imported contract')}"</h4>
+          <div class="row">
+            <button class="btn small outline" id="btnRefineTierAi">Refine with AI</button>
+            <button class="btn small gold" id="btnAddSuggestedTier">Add to portfolio tiering</button>
+          </div>
         </div>
-      </div>
-      <div class="row small mono" style="gap:16px;margin-top:6px;align-items:center;">
-        <span>Value ${SUGGESTED_TIER.value}</span><span>Risk ${SUGGESTED_TIER.risk}</span><span>Criticality ${SUGGESTED_TIER.criticality}</span><span>Impact ${SUGGESTED_TIER.impact}</span>
-        <span class="badge ${tierBadgeClass(getTier(weightedScore(SUGGESTED_TIER)).code)}">${tierDisplayName(getTier(weightedScore(SUGGESTED_TIER)).code)}</span>
-      </div>
-      <p class="small muted" style="margin-top:6px;">Heuristic by default (offline, keyword-based) — "Refine with AI" re-estimates using your connected provider.</p>
-    ` : ''}
-    ${IMPORT_STAGING.length ? `
-      <div class="flex-between" style="margin-top:10px;">
-        <h4 style="margin:0;font-size:13.5px;">Detected ${IMPORT_STAGING.length} candidate clause(s)</h4>
-        <div class="row">
-          ${IMPORT_RAW_TEXT ? '<button class="btn small outline" id="btnAiExtract">Refine with AI</button>' : ''}
-          <button class="btn small outline" id="btnImportAll">Add all</button>
-          <button class="btn small danger" id="btnImportClear">Discard</button>
+        <div class="row small mono" style="gap:16px;margin-top:6px;align-items:center;">
+          <span>Value ${SUGGESTED_TIER.value}</span><span>Risk ${SUGGESTED_TIER.risk}</span><span>Criticality ${SUGGESTED_TIER.criticality}</span><span>Impact ${SUGGESTED_TIER.impact}</span>
+          <span class="badge ${tierBadgeClass(getTier(weightedScore(SUGGESTED_TIER)).code)}">${tierDisplayName(getTier(weightedScore(SUGGESTED_TIER)).code)}</span>
         </div>
-      </div>
-      ${IMPORT_STAGING.map((t,i)=>`<div class="stagingRow"><div class="txt">${esc(t)}</div><button class="btn small outline" data-importadd="${i}">Add</button></div>`).join('')}
-    ` : (IMPORT_RAW_TEXT ? `<button class="btn small outline" id="btnAiExtract" style="margin-top:8px;">Refine with AI</button>` : '')}
-    ${KPI_STAGING.length ? `
-      <hr class="divider">
-      <div class="flex-between">
-        <h4 style="margin:0;font-size:13.5px;">Detected ${KPI_STAGING.length} KPI/SLA-style clause(s) — route straight to the QBR tab</h4>
-        <div class="row">
-          <button class="btn small outline" id="btnKpiAddAll">Add all to QBR</button>
-          <button class="btn small danger" id="btnKpiClear">Discard</button>
+        <p class="small muted" style="margin-top:6px;">Heuristic by default (offline, keyword-based) — "Refine with AI" re-estimates using your connected provider.</p>
+      ` : ''}
+      ${IMPORT_STAGING.length ? `
+        <div class="flex-between" style="margin-top:10px;">
+          <h4 style="margin:0;font-size:13.5px;">Detected ${IMPORT_STAGING.length} candidate clause(s)</h4>
+          <div class="row">
+            ${IMPORT_RAW_TEXT ? '<button class="btn small outline" id="btnAiExtract">Refine with AI</button>' : ''}
+            <button class="btn small outline" id="btnImportAll">Add all</button>
+            <button class="btn small danger" id="btnImportClear">Discard</button>
+          </div>
         </div>
-      </div>
-      ${KPI_STAGING.map((t,i)=>`<div class="stagingRow"><div class="txt">${esc(t)}</div><button class="btn small outline" data-kpiadd="${i}">Add to QBR</button></div>`).join('')}
-    ` : ''}
+        ${IMPORT_STAGING.map((t,i)=>`<div class="stagingRow"><div class="txt">${esc(t)}</div><button class="btn small outline" data-importadd="${i}">Add</button></div>`).join('')}
+      ` : (IMPORT_RAW_TEXT ? `<button class="btn small outline" id="btnAiExtract" style="margin-top:8px;">Refine with AI</button>` : '')}
+      ${KPI_STAGING.length ? `
+        <hr class="divider">
+        <div class="flex-between">
+          <h4 style="margin:0;font-size:13.5px;">Detected ${KPI_STAGING.length} KPI/SLA-style clause(s) — route straight to the QBR tab</h4>
+          <div class="row">
+            <button class="btn small outline" id="btnKpiAddAll">Add all to QBR</button>
+            <button class="btn small danger" id="btnKpiClear">Discard</button>
+          </div>
+        </div>
+        ${KPI_STAGING.map((t,i)=>`<div class="stagingRow"><div class="txt">${esc(t)}</div><button class="btn small outline" data-kpiadd="${i}">Add to QBR</button></div>`).join('')}
+      ` : ''}
+    ` : `
+      <p class="small muted">No active contract loaded. Please upload a contract document (.docx or .pdf) on the <b>0 · Tiering</b> tab (Step 0) first to run automated clause extraction.</p>
+    `}
   </div>`;
 }
 function statusBadge(row){
@@ -1623,11 +1719,31 @@ function renderSettings(){
     </div>
     <div class="row">
       <div class="col field"><label>Claude API key</label><input type="text" id="setClaudeKey" value="${esc(ai.claudeKey)}" placeholder="sk-ant-..."></div>
-      <div class="col field"><label>Claude model</label><input type="text" id="setClaudeModel" value="${esc(ai.claudeModel)}"></div>
+      <div class="col field">
+        <label>Claude model</label>
+        <select id="setClaudeModelSelect" style="margin-bottom:4px;">
+          <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet (latest)</option>
+          <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet (latest)</option>
+          <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku (latest)</option>
+          <option value="custom">Custom model...</option>
+        </select>
+        <input type="text" id="setClaudeModel" value="${esc(ai.claudeModel)}" style="display:none;" placeholder="Enter custom model name">
+      </div>
     </div>
     <div class="row">
       <div class="col field"><label>Gemini API key</label><input type="text" id="setGeminiKey" value="${esc(ai.geminiKey)}"></div>
-      <div class="col field"><label>Gemini model</label><input type="text" id="setGeminiModel" value="${esc(ai.geminiModel)}"></div>
+      <div class="col field">
+        <label>Gemini model</label>
+        <select id="setGeminiModelSelect" style="margin-bottom:4px;">
+          <option value="gemini-2.0-flash">Gemini 2.0 Flash (recommended)</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+          <option value="custom">Custom model...</option>
+        </select>
+        <input type="text" id="setGeminiModel" value="${esc(ai.geminiModel)}" style="display:none;" placeholder="Enter custom model name">
+      </div>
     </div>
     <div class="row">
       <button class="btn gold" id="btnSaveKeys">Save</button>
@@ -1721,9 +1837,70 @@ function wireTiering(){
     });
     exportCSV('contract_tiering.csv', ['Contract','Value','Risk','Criticality','Impact','Score','Tier'], rows);
   });
+
+  const fileInput = document.getElementById('tierUploadFile');
+  if(fileInput){
+    fileInput.addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      const status = document.getElementById('tierUploadStatus');
+      status.textContent = 'Reading document…';
+      try{
+        let text = '';
+        let truncNote = '';
+        if(/\.pdf$/i.test(file.name)){
+          await ensurePdfLib();
+          const arrayBuffer = await file.arrayBuffer();
+          const res = await extractTextFromPdf(arrayBuffer);
+          text = res.text;
+          if(res.totalPages > res.readPages){
+            truncNote = `Read first ${res.readPages} of ${res.totalPages} pages.`;
+          }
+        }else{
+          await ensureMammothLib();
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await window.mammoth.extractRawText({arrayBuffer});
+          text = result.value || '';
+        }
+        const maxLen = 100000;
+        if(text.length > maxLen) {
+          text = text.slice(0, maxLen);
+          truncNote = (truncNote ? truncNote + ' ' : '') + 'Truncated to 100k chars for storage efficiency.';
+        }
+        STATE.activeContract = {
+          name: file.name.replace(/\.(docx|pdf)$/i,''),
+          text: text,
+          truncNote: truncNote
+        };
+        
+        status.textContent = 'Analyzing and auto-scoring contract...';
+        const scores = await aiSuggestTier(text);
+        STATE.tieringSingle = scores;
+        STATE.qbr.supplier = STATE.activeContract.name;
+        saveState();
+        render();
+      }catch(err){
+        status.innerHTML = `<span style="color:var(--red);">${esc(err.message)}</span>`;
+      }
+    });
+  }
+  const clearBtn = document.getElementById('btnClearActiveContract');
+  if(clearBtn) {
+    clearBtn.addEventListener('click', ()=>{
+      STATE.activeContract = {name:'', text:'', truncNote:''};
+      saveState();
+      render();
+    });
+  }
 }
 
 function wireFramework(){
+  const fw = STATE.framework || (STATE.framework = {industry:'', spend:'', maturity:'Ad hoc', summaryText:''});
+  
+  document.getElementById('fwIndustry').addEventListener('change', e=>{ fw.industry = e.target.value; saveState(); });
+  document.getElementById('fwSpend').addEventListener('change', e=>{ fw.spend = e.target.value; saveState(); });
+  document.getElementById('fwMaturity').addEventListener('change', e=>{ fw.maturity = e.target.value; saveState(); });
+
   document.querySelectorAll('[data-qaclick]').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const idx = parseInt(btn.dataset.qaclick);
@@ -1739,9 +1916,15 @@ function wireFramework(){
     const industry = document.getElementById('fwIndustry').value || 'the organisation';
     const spend = document.getElementById('fwSpend').value || 'unspecified managed spend';
     const maturity = document.getElementById('fwMaturity').value;
-    const prompt = `Write a 150-word executive summary of a Contract Lifecycle Management framework (sections: pre-contract tiering, obligation tracking, KPIs, SLAs, rebate monitoring, change orders, termination, QBR) for a ${industry} organisation with ${spend} managed spend, currently at "${maturity}" maturity. Recommend the top 2 priorities to close leakage first.`;
+    let prompt = `Write a 150-word executive summary of a Contract Lifecycle Management framework (sections: pre-contract tiering, obligation tracking, KPIs, SLAs, rebate monitoring, change orders, termination, QBR) for a ${industry} organisation with ${spend} managed spend, currently at "${maturity}" maturity. Recommend the top 2 priorities to close leakage first.`;
+    
+    if (STATE.activeContract && STATE.activeContract.text) {
+      prompt = `Write a 150-word CLM executive summary specifically tailored to the active contract "${STATE.activeContract.name}" in the ${industry} industry with ${spend} spend, at "${maturity}" maturity. Highlight key risks, rebate details, and obligations based on this contract excerpt:\n\n${STATE.activeContract.text.slice(0, 5000)}`;
+    }
     try{
       const text = await askAI(prompt);
+      fw.summaryText = text;
+      saveState();
       out.innerHTML = `<div class="card" style="white-space:pre-wrap;font-size:13.5px;">${esc(text)}</div>`;
     }catch(e){
       out.innerHTML = `<p class="small" style="color:var(--red);">${esc(e.message)}</p>`;
@@ -1789,6 +1972,50 @@ function wireQBR(){
   document.getElementById('qbrNarrative').addEventListener('input',e=>{ q.narrative=e.target.value; saveState(); });
   const recsEl = document.getElementById('qbrRecommendations');
   if(recsEl) recsEl.addEventListener('input', e=>{ q.recommendations=e.target.value; saveState(); });
+
+  const qbrAiBtn = document.getElementById('btnQbrAiExtract');
+  if(qbrAiBtn){
+    qbrAiBtn.addEventListener('click', async ()=>{
+      if(!STATE.activeContract || !STATE.activeContract.text) return;
+      qbrAiBtn.disabled = true; qbrAiBtn.textContent = 'Extracting…';
+      
+      if (STATE.ai.mode === 'sandbox') {
+        const candidates = extractKpiSlaCandidates(STATE.activeContract.text);
+        candidates.forEach(c => {
+          q.slas.push({id:uid(), name:c, target:extractTargetNumber(c), actual:'', status:'On track'});
+        });
+        saveState();
+        render();
+        qbrAiBtn.disabled = false; qbrAiBtn.textContent = 'AI Extract KPIs/SLAs';
+        return;
+      }
+      
+      const prompt = `Extract all SLA and KPI commitments from this contract text as a JSON object with this exact format: {"kpis": [{"name": "KPI Name", "target": "Target Value (e.g. 98%)"}], "slas": [{"name": "SLA Name", "target": "Target Value (e.g. 4 hours)"}]}. Return ONLY JSON, no markdown formatting fences or other text.\n\nText:\n${STATE.activeContract.text.slice(0, 6000)}`;
+      
+      try {
+        const res = await askAI(prompt);
+        const cleaned = res.replace(/```json|```/g,'').trim();
+        const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+        const parsed = JSON.parse(cleaned.slice(s,e+1));
+        
+        if (parsed.kpis) {
+          parsed.kpis.forEach(k => {
+            q.kpis.push({id:uid(), name:k.name, target:k.target, actual:'', status:'On track'});
+          });
+        }
+        if (parsed.slas) {
+          parsed.slas.forEach(k => {
+            q.slas.push({id:uid(), name:k.name, target:k.target, actual:'', status:'On track'});
+          });
+        }
+        saveState();
+        render();
+      } catch(err) {
+        alert("Extraction failed: " + err.message);
+      }
+      qbrAiBtn.disabled = false; qbrAiBtn.textContent = 'AI Extract KPIs/SLAs';
+    });
+  }
 
   document.getElementById('btnAddKpi').addEventListener('click',()=>{
     q.kpis.push({id:uid(),name:'',target:'',actual:'',status:'On track'}); saveState(); render();
@@ -2172,14 +2399,58 @@ function wireGovernance(){
 }
 
 function wireSettings(){
+  const ai = STATE.ai;
+  const claudeSelect = document.getElementById('setClaudeModelSelect');
+  const claudeInput = document.getElementById('setClaudeModel');
+  const geminiSelect = document.getElementById('setGeminiModelSelect');
+  const geminiInput = document.getElementById('setGeminiModel');
+
+  // Initialize Claude select
+  const standardClaude = ['claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'];
+  if (standardClaude.includes(ai.claudeModel)) {
+    claudeSelect.value = ai.claudeModel;
+    claudeInput.style.display = 'none';
+  } else {
+    claudeSelect.value = 'custom';
+    claudeInput.style.display = 'block';
+  }
+
+  // Initialize Gemini select
+  const standardGemini = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+  if (standardGemini.includes(ai.geminiModel)) {
+    geminiSelect.value = ai.geminiModel;
+    geminiInput.style.display = 'none';
+  } else {
+    geminiSelect.value = 'custom';
+    geminiInput.style.display = 'block';
+  }
+
+  claudeSelect.addEventListener('change', ()=>{
+    if(claudeSelect.value === 'custom') {
+      claudeInput.style.display = 'block';
+    } else {
+      claudeInput.style.display = 'none';
+      claudeInput.value = claudeSelect.value;
+    }
+  });
+
+  geminiSelect.addEventListener('change', ()=>{
+    if(geminiSelect.value === 'custom') {
+      geminiInput.style.display = 'block';
+    } else {
+      geminiInput.style.display = 'none';
+      geminiInput.value = geminiSelect.value;
+    }
+  });
+
   document.getElementById('btnSaveKeys').addEventListener('click',()=>{
     STATE.ai.mode = document.getElementById('setMode').value;
     STATE.ai.webSearch = document.getElementById('setWebSearch').checked;
     STATE.ai.fallbackMode = document.getElementById('setFallbackMode').value;
     STATE.ai.claudeKey = document.getElementById('setClaudeKey').value;
-    STATE.ai.claudeModel = document.getElementById('setClaudeModel').value;
+    STATE.ai.claudeModel = claudeSelect.value === 'custom' ? claudeInput.value : claudeSelect.value;
     STATE.ai.geminiKey = document.getElementById('setGeminiKey').value;
-    STATE.ai.geminiModel = document.getElementById('setGeminiModel').value;
+    STATE.ai.geminiModel = geminiSelect.value === 'custom' ? geminiInput.value : geminiSelect.value;
     saveState();
     document.getElementById('aiTestOut').innerHTML = '<span style="color:var(--green);">Saved.</span>';
   });
