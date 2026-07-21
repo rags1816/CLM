@@ -449,7 +449,19 @@ function loadState(){
     const raw = window.localStorage.getItem('clm_suite_state');
     if(!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
     const parsed = JSON.parse(raw);
-    return Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), parsed);
+    const state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    const merge = (target, source) => {
+      for (const key in source) {
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+          if (!target[key]) target[key] = {};
+          merge(target[key], source[key]);
+        } else {
+          target[key] = source[key];
+        }
+      }
+    };
+    merge(state, parsed);
+    return state;
   }catch(e){ return JSON.parse(JSON.stringify(DEFAULT_STATE)); }
 }
 function saveState(){
@@ -535,7 +547,7 @@ async function ensurePdfLib(){
 async function extractTextFromPdf(arrayBuffer){
   const pdf = await window.pdfjsLib.getDocument({data:arrayBuffer}).promise;
   const totalPages = pdf.numPages;
-  const maxPages = Math.min(totalPages, 150);
+  const maxPages = Math.min(totalPages, 350);
   let text='';
   for(let i=1;i<=maxPages;i++){
     const page = await pdf.getPage(i);
@@ -654,6 +666,18 @@ function exportCSV(filename, headers, rows){
   downloadBlob(lines.join('\n'), filename, 'text/csv');
 }
 
+function formatNetworkError(err, mode) {
+  let detail = err.message || String(err);
+  if (detail.includes('Failed to fetch') || detail.includes('NetworkError') || detail.includes('Failed to load resource')) {
+    if (window.location.protocol === 'file:') {
+      return `${detail} (CORS policy blocked direct API access from the file:// protocol). Rationale: Browsers block direct network requests to security-sensitive API endpoints (especially Anthropic/Claude) from local files for safety. Fix: Run a local web server (e.g. run "python -m http.server" in this folder, then open "http://localhost:8000") or use Gemini, which supports direct browser requests from local files.`;
+    } else {
+      return `${detail}. Check your internet connection or company proxy/firewall, as calls to the ${mode === 'claude' ? 'Anthropic' : 'Google'} API gateway might be blocked.`;
+    }
+  }
+  return detail;
+}
+
 /* ---------- AI dispatch ---------- */
 async function askAI(prompt){
   const mode = STATE.ai.mode;
@@ -663,18 +687,19 @@ async function askAI(prompt){
     return await sandboxAnswer(prompt);
   }catch(primaryErr){
     const fb = STATE.ai.fallbackMode;
+    const formattedError = formatNetworkError(primaryErr, mode);
     if(fb && fb!=='none' && fb!==mode){
       try{
         let text;
         if(fb==='claude') text = await askClaude(prompt);
         else if(fb==='gemini') text = await askGemini(prompt);
         else text = await sandboxAnswer(prompt);
-        return `[Primary (${mode}) failed: ${primaryErr.message} — used fallback: ${fb}]\n\n${text}`;
+        return `[Primary (${mode}) failed: ${formattedError} — used fallback: ${fb}]\n\n${text}`;
       }catch(fallbackErr){
-        throw new Error(primaryErr.message+' — fallback ('+fb+') also failed: '+fallbackErr.message);
+        throw new Error(formattedError+' — fallback ('+fb+') also failed: '+formatNetworkError(fallbackErr, fb));
       }
     }
-    throw primaryErr;
+    throw new Error(formattedError);
   }
 }
 async function askClaude(prompt){
@@ -707,11 +732,16 @@ async function askClaude(prompt){
 }
 async function askGemini(prompt){
   if(!STATE.ai.geminiKey) throw new Error('No Gemini API key set in Settings.');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${STATE.ai.geminiModel}:generateContent?key=${STATE.ai.geminiKey}`;
+  const modelName = STATE.ai.geminiModel.startsWith('models/') ? STATE.ai.geminiModel.slice(7) : STATE.ai.geminiModel;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${STATE.ai.geminiKey}`;
   const body = { contents:[{parts:[{text:prompt}]}] };
   if(STATE.ai.webSearch) body.tools = [{ google_search: {} }];
   const res = await fetch(url, {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-goog-api-key': STATE.ai.geminiKey
+    },
     body: JSON.stringify(body)
   });
   if(!res.ok) {
@@ -1873,10 +1903,10 @@ function wireTiering(){
           combinedName = STATE.activeContract.name + ' + ' + newName;
         }
 
-        const maxLen = 300000; // Increased to 300k characters for at least 150 pages
+        const maxLen = 1200000; // Increased to 1.2M characters for at least 2x 300 pages
         if(combinedText.length > maxLen) {
           combinedText = combinedText.slice(0, maxLen);
-          truncNote = (truncNote ? truncNote + ' ' : '') + 'Truncated to 300k chars for storage efficiency.';
+          truncNote = (truncNote ? truncNote + ' ' : '') + 'Truncated to 1.2M chars for storage efficiency.';
         }
         
         STATE.activeContract = {
@@ -2459,10 +2489,10 @@ function wireSettings(){
     STATE.ai.mode = document.getElementById('setMode').value;
     STATE.ai.webSearch = document.getElementById('setWebSearch').checked;
     STATE.ai.fallbackMode = document.getElementById('setFallbackMode').value;
-    STATE.ai.claudeKey = document.getElementById('setClaudeKey').value;
-    STATE.ai.claudeModel = claudeSelect.value === 'custom' ? claudeInput.value : claudeSelect.value;
-    STATE.ai.geminiKey = document.getElementById('setGeminiKey').value;
-    STATE.ai.geminiModel = geminiSelect.value === 'custom' ? geminiInput.value : geminiSelect.value;
+    STATE.ai.claudeKey = document.getElementById('setClaudeKey').value.trim();
+    STATE.ai.claudeModel = (claudeSelect.value === 'custom' ? claudeInput.value : claudeSelect.value).trim();
+    STATE.ai.geminiKey = document.getElementById('setGeminiKey').value.trim();
+    STATE.ai.geminiModel = (geminiSelect.value === 'custom' ? geminiInput.value : geminiSelect.value).trim();
     saveState();
     document.getElementById('aiTestOut').innerHTML = '<span style="color:var(--green);">Saved.</span>';
   });
@@ -2472,11 +2502,29 @@ function wireSettings(){
   document.getElementById('btnTestAI').addEventListener('click', async ()=>{
     const out = document.getElementById('aiTestOut');
     out.textContent = 'Testing…';
+    const mode = STATE.ai.mode;
+    if (mode === 'sandbox') {
+      out.innerHTML = `<span style="color:var(--amber);">Active Mode is Sandbox. To test a connection, change the "API Mode" dropdown above to Gemini or Claude, then click Save and Test again.</span>`;
+      return;
+    }
+    
+    // Temporarily disable fallback so we get the direct error of the selected mode
+    const origFallback = STATE.ai.fallbackMode;
+    STATE.ai.fallbackMode = 'none';
+    
     try{
-      const text = await askAI('Reply with a single short sentence confirming this connection works.');
-      out.innerHTML = `<span style="color:var(--green);">OK:</span> ${esc(text).slice(0,200)}`;
+      let text = '';
+      if (mode === 'claude') {
+        text = await askClaude('Test connection. Reply only "Claude OK".');
+      } else if (mode === 'gemini') {
+        text = await askGemini('Test connection. Reply only "Gemini OK".');
+      }
+      out.innerHTML = `<span style="color:var(--green);">Connection Successful:</span> ${esc(text)}`;
     }catch(e){
-      out.innerHTML = `<span style="color:var(--red);">${esc(e.message)}</span>`;
+      const formatted = formatNetworkError(e, mode);
+      out.innerHTML = `<span style="color:var(--red); font-weight: 500;">Connection Failed:</span><br><span style="font-size:12px;color:var(--red);">${esc(formatted)}</span>`;
+    } finally {
+      STATE.ai.fallbackMode = origFallback;
     }
   });
   document.getElementById('btnResetAll').addEventListener('click',()=>{
