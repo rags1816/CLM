@@ -772,7 +772,8 @@ async function askClaude(prompt){
   }
   const data = await res.json();
   const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text);
-  return textBlocks.length ? textBlocks.join('\n') : '(no text returned)';
+  if(!textBlocks.length) throw new Error('Claude responded successfully but returned no usable text (possibly blocked by a safety filter, hit the token limit before producing text, or used an unsupported response type). Try again, rephrase, or switch provider in Settings.');
+  return textBlocks.join('\n');
 }
 async function askGemini(prompt){
   if(!STATE.ai.geminiKey) throw new Error('No Gemini API key set in Settings.');
@@ -801,7 +802,8 @@ async function askGemini(prompt){
   const data = await res.json();
   const parts = data.candidates?.[0]?.content?.parts || [];
   const text = parts.filter(p=>p.text).map(p=>p.text).join('\n');
-  return text || '(no text returned)';
+  if(!text) throw new Error('Gemini responded successfully but returned no usable text (possibly blocked by a safety filter, hit the token limit before producing text, or used an unsupported response type). Try again, rephrase, or switch provider in Settings.');
+  return text;
 }
 function sandboxAnswer(prompt){
   // Offline, template-based draft — no network. Labelled honestly as Sandbox output.
