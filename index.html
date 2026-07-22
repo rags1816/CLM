@@ -221,7 +221,7 @@ const GUIDE_TIPS = {
   coverage:['Three logs in one place: category spend coverage, stakeholder feedback, and supplier collaboration opportunities.','% spend under contract here feeds the Governance rollup — keep it current, it\'s the headline leakage indicator.'],
   scorecard:['Score your organisation 1–5 across each dimension. This feeds the Governance rollup.','Re-run quarterly to track maturity trend.','This maturity assessment is CLM Suite\'s own model — 15 questions across 6 dimensions. It\'s informed by, but not copied from, CIPS/Hackett/WorldCC research; see the Framework tab for the specific benchmarks.'],
   governance:['This is the CPO-facing rollup: spend coverage, tier mix, overdue obligations, maturity gaps — the value-leak view.','Everything here is computed live from the other tabs.','PowerPoint deck export needs internet to load the library once per session.'],
-  settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/Register/Rebates/QBR) always uses Gemini directly for these calls, regardless of the provider selected here — that keeps its cost estimate accurate. It still falls back to the offline heuristic if no Gemini key is set.']
+  settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/Register/Rebates/QBR) uses Gemini directly when Primary mode is Claude or Gemini, regardless of which of those two is selected — that keeps its cost estimate accurate. In Sandbox mode it stays fully local instead — no Gemini call is made even if a Gemini key is stored.']
 };
 
 const SCORECARD_QUESTIONS = [
@@ -956,6 +956,7 @@ function renderAbout(){
           <li>Governance rollup view</li>
           <li>CSV export</li>
           <li>Sandbox AI drafting</li>
+          <li>Full AI document review, in Sandbox mode <span class="muted">— no Gemini call is made, even if a Gemini key happens to be stored</span></li>
         </ul>
       </div>
       <div>
@@ -965,7 +966,7 @@ function renderAbout(){
           <li>.pptx export <span class="muted">— no offline fallback</span></li>
           <li>Contract upload & parsing (0 · Tiering, up to 350 pages) <span class="muted">— no offline fallback for the initial parse</span></li>
           <li>Claude / Gemini calls <span class="muted">— every request; Sandbox can be set as auto-fallback</span></li>
-          <li>Full AI document review (long documents, chunked) <span class="muted">— always uses Gemini directly for cost-estimate accuracy, regardless of the provider set in Settings; falls back to the offline heuristic if no Gemini key is set</span></li>
+          <li>Full AI document review, when Primary mode is Claude or Gemini <span class="muted">— always uses Gemini directly for cost-estimate accuracy regardless of which of those two is selected; falls back to the offline heuristic if no Gemini key is set</span></li>
           <li>Web search grounding <span class="muted">— optional, off by default, in ⚙ Settings; adds real search calls and typically extra cost</span></li>
         </ul>
       </div>
@@ -983,6 +984,11 @@ function renderAbout(){
 }
 
 /* ========== TIERING ========== */
+// Session-only (not persisted): shown once per session, the first time a document is uploaded
+// while Sandbox mode is active AND a Gemini key happens to be stored -- confirms Sandbox was
+// genuinely honored for that specific upload, rather than leaving the user to just trust it.
+let SANDBOX_REASSURANCE_MSG = '';
+let SANDBOX_REASSURANCE_SHOWN = false;
 function renderTiering(){
   const s = STATE.tieringSingle;
   const score = weightedScore(s);
@@ -1000,6 +1006,7 @@ function renderTiering(){
   <div class="card">
     <h3 style="margin-top:0;">Upload & Analyze Contract</h3>
     <p class="muted small">Upload a contract (.docx or .pdf) to load it as the active contract context for AI extraction and scoring.</p>
+    ${STATE.ai.mode==='sandbox' ? `<p style="margin:0 0 8px;"><span class="badge ok" style="padding:6px 10px;">🔒 Sandbox mode: nothing leaves your browser</span> <span class="small muted">Document review runs entirely locally — safe for confidential contracts.</span></p>` : ''}
     <div class="field" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <input type="file" id="tierUploadFile" accept=".docx,.pdf" style="max-width:320px;">
       <label style="display:inline-flex;align-items:center;font-weight:400;margin-bottom:0;cursor:pointer;"><input type="checkbox" id="chkAppendFile" style="width:auto;margin-right:4px;">Append to active contract</label>
@@ -1008,6 +1015,7 @@ function renderTiering(){
     </div>
     <div id="tierUploadStatus" class="small muted"></div>
     ${STATE.activeContract && STATE.activeContract.truncNote ? `<p style="margin:6px 0 0;color:var(--amber);" class="small">⚠ ${esc(STATE.activeContract.truncNote)}</p>` : ''}
+    ${SANDBOX_REASSURANCE_MSG ? `<p style="margin:6px 0 0;color:var(--green);" class="small">${esc(SANDBOX_REASSURANCE_MSG)}</p>` : ''}
   </div>
   <p class="muted">Score one contract, or paste several below to test auto-tiering across a batch.</p>
   <div class="card" style="padding:12px 16px;margin-bottom:16px;">
@@ -1638,7 +1646,9 @@ function renderDocReviewPanel(){
   const isLong = chunks.length>1;
   const cachedResult = getCachedReview();
   let html = `<hr class="divider"><h3>AI document review (full text)</h3>
-  <p class="small muted">This feature always uses Gemini directly, regardless of the provider set in ⚙ Settings — so the cost estimate below stays accurate. If no Gemini key is set, it falls back to the same offline keyword-based heuristic used elsewhere in the app.</p>`;
+  ${STATE.ai.mode==='sandbox'
+    ? `<p class="small muted">🔒 Sandbox mode is active — this review runs entirely locally using offline keyword heuristics. No document content is sent to Gemini or any other provider, even if a Gemini key is stored in ⚙ Settings.</p>`
+    : `<p class="small muted">This feature always uses Gemini directly, regardless of whether Primary mode is Claude or Gemini — so the cost estimate below stays accurate. If no Gemini key is set, it falls back to the same offline keyword-based heuristic used elsewhere in the app.</p>`}`;
   if(DOC_REVIEW_STATUS) html += `<p class="small muted">${esc(DOC_REVIEW_STATUS)}</p>`;
   if(!cachedResult){
     if(!isLong){
@@ -1849,13 +1859,13 @@ function renderSettings(){
   return `
   <h2>⚙ AI Settings</h2>
   <div class="card">
-    <p class="small muted">Sandbox drafts offline using templates — no key, no network. Claude/Gemini call the provider directly from your browser using your own key; keys are stored only in this browser's localStorage.</p>
+    <p class="small muted">Sandbox drafts offline using templates and keyword heuristics — no key, no network, nothing leaves your browser, for every feature including full document review. Recommended whenever you're working with a confidential contract. Claude/Gemini call the provider directly from your browser using your own key; keys are stored only in this browser's localStorage.</p>
     <div class="field"><label><input type="checkbox" id="setWebSearch" ${ai.webSearch?'checked':''} style="width:auto;margin-right:6px;">Ground with web search</label>
       <p class="small muted" style="margin:4px 0 0;">Off by default. When on and using Claude, requests add the <span class="mono">web_search_20250305</span> tool; when using Gemini, requests add <span class="mono">google_search</span> grounding. Anthropic's/Google's servers run a real search and feed results into the answer before it's returned. This makes real network calls (not just the once-per-session library loads) and <b>typically costs extra</b> on top of normal token usage — check current pricing at docs.claude.com or ai.google.dev before relying on it at volume. Has no effect in Sandbox mode.</p>
     </div>
     <div class="field"><label>Primary mode</label>
       <select id="setMode">
-        <option value="sandbox" ${ai.mode==='sandbox'?'selected':''}>Sandbox (offline)</option>
+        <option value="sandbox" ${ai.mode==='sandbox'?'selected':''}>Sandbox (offline) — nothing leaves your browser, recommended for confidential documents</option>
         <option value="claude" ${ai.mode==='claude'?'selected':''}>Claude</option>
         <option value="gemini" ${ai.mode==='gemini'?'selected':''}>Gemini</option>
       </select>
@@ -1911,7 +1921,7 @@ function renderSettings(){
       <li><b>.pptx export</b> (QBR, Governance deck) — loads a library once per session. <span class="muted">If blocked: export fails with a clear message — no offline fallback for PowerPoint.</span></li>
       <li><b>Word/PDF contract upload</b> (0 · Tiering → Upload & Analyze Contract, up to 350 pages) — loads a parser library once per session, then sets the active contract used across Register/Rebates/QBR. <span class="muted">If blocked: upload fails with a clear message; manual entry still works.</span></li>
       <li><b>Claude / Gemini AI drafting</b> — calls the provider's API directly on every request (not just once). <span class="muted">If blocked or no key: Sandbox mode (offline templates/heuristics) still works, and can be set as an automatic fallback above.</span></li>
-      <li><b>Full AI document review</b> (long documents, chunked — Tiering/Register/Rebates/QBR) — always calls Gemini directly for these requests, regardless of the provider selected above, so its cost estimate stays accurate. <span class="muted">If blocked or no Gemini key: falls back to the same offline heuristic extraction used elsewhere.</span></li>
+      <li><b>Full AI document review</b> (long documents, chunked — Tiering/Register/Rebates/QBR) — when Primary mode is Claude or Gemini, this always calls Gemini directly for these specific requests (regardless of which of those two is selected), so its cost estimate stays accurate. <span class="muted">If blocked or no Gemini key: falls back to the same offline heuristic extraction used elsewhere.</span> <b>In Sandbox mode, this is fully local too</b> — no Gemini call is made for document review even if a Gemini key happens to be stored in Settings.</li>
     </ul>
   </div>
   <div class="card">
@@ -2057,6 +2067,10 @@ function wireTiering(){
         STATE.tieringSingle = final.suggestedTier;
         STATE.qbr.supplier = STATE.activeContract.name;
         STATE.qbr.contractId = STATE.activeContract.id;
+        if(STATE.ai.mode==='sandbox' && STATE.ai.geminiKey && !SANDBOX_REASSURANCE_SHOWN){
+          SANDBOX_REASSURANCE_SHOWN = true;
+          SANDBOX_REASSURANCE_MSG = '🔒 Confirmed: Sandbox mode was honored for this upload — this document was processed entirely locally using offline heuristics. No content was sent to Gemini, even though a Gemini key is stored in Settings.';
+        }
         saveState();
         render();
       }catch(err){
@@ -2619,17 +2633,27 @@ function parseFinalReviewJson(raw, fallbackText){
     return heuristicFinalReview(fallbackText);
   }
 }
+// Single choke point every document-review Gemini call funnels through -- reviewDocumentSingleCall,
+// mapChunkForReview, and reduceChunkSummaries all call THIS instead of askGemini directly. In
+// Sandbox mode this throws before any network attempt, regardless of whether a Gemini key happens
+// to be stored (e.g. left over from previously trying Gemini) -- the caller's existing catch-and-
+// fall-back-to-heuristic handling then takes over. This is the actual guarantee: Sandbox mode is a
+// hard gate here, not an accident of no key being present.
+async function askGeminiForDocReview(prompt){
+  if(STATE.ai.mode==='sandbox') throw new Error('SANDBOX_MODE_NO_NETWORK_CALL');
+  return askGemini(prompt);
+}
 async function reviewDocumentSingleCall(text, pageOffsets){
   const prompt = `Review this contract document and produce a structured summary. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"kpis":[{"name":"...","target":"...","pageRange":"..."}],"slas":[{"name":"...","target":"...","pageRange":"..."}],"rebateTiers":[{"tierName":"...","threshold":"...","ratePct":N,"pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\nOnly include a pageRange per item if reasonably inferable from context; otherwise use an empty string. If a category has nothing in the document, return an empty array for it.\n\nDocument text:\n${text}`;
   let raw;
-  try{ raw = await askGemini(prompt); }catch(e){ return heuristicFinalReview(text); }
+  try{ raw = await askGeminiForDocReview(prompt); }catch(e){ return heuristicFinalReview(text); }
   return parseFinalReviewJson(raw, text);
 }
 async function mapChunkForReview(chunk, index, total, pageOffsets){
   const range = pageRangeLabel(chunk.start, chunk.end, pageOffsets) || `part ${index+1} of ${total}`;
   const prompt = `You are reviewing PART ${index+1} of ${total} of a single contract document (approx. ${range}). Extract ONLY what is explicitly present in this excerpt. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...strings...],"obligations":[...strings...],"kpisSlas":[...strings...],"financialTerms":[...strings...],"riskFlags":[...strings...]}\nIf a category has nothing in this excerpt, return an empty array for it.\n\nExcerpt:\n${chunk.text}`;
   let raw;
-  try{ raw = await askGemini(prompt); }catch(e){ return heuristicChunkSummary(chunk.text, range); }
+  try{ raw = await askGeminiForDocReview(prompt); }catch(e){ return heuristicChunkSummary(chunk.text, range); }
   try{
     const cleaned = raw.replace(/```json|```/g,'').trim();
     const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
@@ -2644,7 +2668,7 @@ async function reduceChunkSummaries(partials, fallbackFullText){
   const packed = partials.map(p=>`[${p.range}]\nParties: ${p.parties.join('; ')}\nObligations: ${p.obligations.join('; ')}\nKPIs/SLAs: ${p.kpisSlas.join('; ')}\nFinancial terms: ${p.financialTerms.join('; ')}\nRisk flags: ${p.riskFlags.join('; ')}`).join('\n\n');
   const prompt = `You are combining partial summaries of DIFFERENT SECTIONS of the SAME single contract document into one final structured review. Each section below is labeled with its approximate page range or part number. Deduplicate overlapping items across sections, but KEEP each item's page-range attribution. Where the "KPIs/SLAs" and "Financial terms" lines contain KPI/SLA targets or rebate/volume-discount tiers, structure them into the kpis/slas/rebateTiers fields below rather than leaving them as loose text. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"kpis":[{"name":"...","target":"...","pageRange":"..."}],"slas":[{"name":"...","target":"...","pageRange":"..."}],"rebateTiers":[{"tierName":"...","threshold":"...","ratePct":N,"pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\nIf a category has nothing across all sections, return an empty array for it.\n\nSection summaries:\n${packed}`;
   let raw;
-  try{ raw = await askGemini(prompt); }catch(e){ return heuristicFinalReview(fallbackFullText); }
+  try{ raw = await askGeminiForDocReview(prompt); }catch(e){ return heuristicFinalReview(fallbackFullText); }
   return parseFinalReviewJson(raw, fallbackFullText);
 }
 // Orchestrator: <=1 chunk -> exactly one AI call (today's behavior, no chunk/cost UI needed).
@@ -2698,6 +2722,16 @@ async function chooseAndRunDocumentReview(){
   const text = STATE.activeContract.text;
   const pageOffsets = STATE.activeContract.pageOffsets;
   const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
+  if(STATE.ai.mode==='sandbox'){
+    // No Gemini call will be made regardless of the choice, so there's no cost/coverage
+    // tradeoff to ask about -- skip the confirm() dialog entirely and run the heuristic over
+    // the FULL text in one pass (free and instant locally, so no reason to artificially limit
+    // coverage to a "quick" first-chunk-only slice the way the paid path does).
+    const final = heuristicFinalReview(text);
+    const result = {final, mode:'sandbox-local', chunkCount:chunks.length, chunksReviewed:chunks.length};
+    setCachedReview(result);
+    return result;
+  }
   let quickReview = false;
   if(chunks.length>1){
     const cost = estimateChunkedReviewCost(chunks, STATE.ai.geminiModel);
