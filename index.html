@@ -1048,9 +1048,9 @@ function renderTiering(){
     <div class="field"><label>Or paste contract/supplier names (one per line) to auto-score</label><textarea id="bulkPasteList" placeholder="Global Logistics Co&#10;Office Supplies Ltd&#10;Cloud Hosting Provider"></textarea></div>
     <button class="btn gold small" id="btnBulkAiScore">AI score & add to table</button>
     <div id="bulkAiStatus" class="small muted" style="margin-top:6px;"></div>
-    <table style="margin-top:12px;"><thead><tr><th>Contract</th><th>Value</th><th>Risk</th><th>Criticality</th><th>Impact</th><th>Score</th><th>Tier</th><th></th></tr></thead>
+    <table style="margin-top:12px;"><thead><tr><th>Contract</th><th>Value</th><th>Risk</th><th>Criticality</th><th>Impact</th><th>Score</th><th>Tier</th><th title="Optional classification codes — manual entry only, no lookup or validation.">UNSPSC / CPV</th><th></th></tr></thead>
     <tbody id="bulkTbody">
-      ${STATE.tieringBulk.map(row=>renderBulkRow(row)).join('') || '<tr><td colspan="8" class="small muted">No contracts added yet.</td></tr>'}
+      ${STATE.tieringBulk.map(row=>renderBulkRow(row)).join('') || '<tr><td colspan="9" class="small muted">No contracts added yet.</td></tr>'}
     </tbody></table>
     <div class="row" style="margin-top:10px;">
       <button class="btn outline small" id="btnExportBulkCSV">Export CSV</button>
@@ -1085,6 +1085,9 @@ function renderHeatmapSVG(bulk){
     ${dots}
   </svg>`;
 }
+// unspscCode/cpvCode (below): optional, manual-entry only, no lookup/validation -- matches the
+// pattern in CategoryAI. If a "duplicate contract" action is ever added to this table, these two
+// fields must be excluded from what it copies, same as CategoryAI's duplicate-as-child does.
 function renderBulkRow(row){
   const score = weightedScore(row);
   const tier = getTier(score);
@@ -1096,6 +1099,10 @@ function renderBulkRow(row){
     <td><input type="number" min="1" max="5" data-f="impact" value="${row.impact}" style="width:52px;"></td>
     <td class="mono">${score.toFixed(1)}</td>
     <td><span class="badge ${tierBadgeClass(tier.code)}">${tierDisplayName(tier.code)}</span></td>
+    <td>
+      <input type="text" data-f="unspscCode" value="${esc(row.unspscCode||'')}" placeholder="UNSPSC" style="width:90px;display:block;">
+      <input type="text" data-f="cpvCode" value="${esc(row.cpvCode||'')}" placeholder="CPV" style="width:90px;display:block;margin-top:2px;">
+    </td>
     <td><button class="btn danger small" data-del="${row.id}">✕</button></td>
   </tr>`;
 }
@@ -1941,7 +1948,7 @@ function wireTiering(){
     });
   });
   document.getElementById('btnAddBulkRow').addEventListener('click',()=>{
-    STATE.tieringBulk.push({id:uid(),name:'New contract',value:3,risk:3,criticality:3,impact:3});
+    STATE.tieringBulk.push({id:uid(),name:'New contract',value:3,risk:3,criticality:3,impact:3,unspscCode:'',cpvCode:''});
     saveState(); render();
   });
   document.getElementById('btnBulkAiScore').addEventListener('click', async ()=>{
@@ -1963,7 +1970,8 @@ function wireTiering(){
       inp.addEventListener('change', e=>{
         const row = STATE.tieringBulk.find(r=>r.id===id);
         const f = e.target.dataset.f;
-        row[f] = (f==='name') ? e.target.value : Math.max(1,Math.min(5, parseInt(e.target.value)||1));
+        const textFields = ['name','unspscCode','cpvCode']; // free text -- not 1-5 clamped scores
+        row[f] = textFields.includes(f) ? e.target.value : Math.max(1,Math.min(5, parseInt(e.target.value)||1));
         saveState(); render();
       });
     });
