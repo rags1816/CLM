@@ -558,13 +558,14 @@ async function extractTextFromPdf(arrayBuffer){
   const pdf = await window.pdfjsLib.getDocument({data:arrayBuffer}).promise;
   const totalPages = pdf.numPages;
   const maxPages = Math.min(totalPages, 350);
-  let text='';
+  let text=''; const pageOffsets=[];
   for(let i=1;i<=maxPages;i++){
+    pageOffsets.push(text.length);
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     text += content.items.map(it=>it.str).join(' ') + '\n';
   }
-  return {text, totalPages, readPages:maxPages};
+  return {text, totalPages, readPages:maxPages, pageOffsets};
 }
 
 /* blocks: [{h:2,text}, {h:3,text}, {p:text}, {table:{headers:[...],rows:[[...]]}}] */
@@ -1504,6 +1505,10 @@ let IMPORT_STATUS_MSG = '';
 let IMPORT_TRUNC_NOTE = '';
 let IMPORT_SKIPPED_LEN = 0;
 let KPI_SKIPPED_LEN = 0;
+let IMPORT_PAGE_OFFSETS = [];
+let DOC_REVIEW_RESULT = null;
+let DOC_REVIEW_STATUS = '';
+let DOC_REVIEW_USE_SUMMARY = false;
 function renderRegister(){
   const rows = STATE.register;
   if (STATE.activeContract && STATE.activeContract.text && IMPORT_RAW_TEXT !== STATE.activeContract.text) {
@@ -1592,10 +1597,50 @@ function renderRegister(){
         </div>
         ${KPI_STAGING.map((t,i)=>`<div class="stagingRow"><div class="txt">${esc(t)}</div><button class="btn small outline" data-kpiadd="${i}">Add to QBR</button></div>`).join('')}
       ` : ''}
+      ${renderDocReviewPanel()}
     ` : `
       <p class="small muted">No active contract loaded. Please upload a contract document (.docx or .pdf) on the <b>0 · Tiering</b> tab (Step 0) first to run automated clause extraction.</p>
     `}
   </div>`;
+}
+function renderDocReviewPanel(){
+  const text = IMPORT_RAW_TEXT;
+  const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
+  const isLong = chunks.length>1;
+  let html = `<hr class="divider"><h3>AI document review (full text)</h3>`;
+  if(DOC_REVIEW_STATUS) html += `<p class="small muted">${esc(DOC_REVIEW_STATUS)}</p>`;
+  if(!DOC_REVIEW_RESULT){
+    if(!isLong){
+      html += `<p class="small muted">Document is ${text.length.toLocaleString()} characters — under the single-call threshold, so one AI call reviews it in full.</p>
+      <button class="btn small gold" id="btnRunDocReview">Run AI document review</button>`;
+    }else{
+      const cost = estimateChunkedReviewCost(chunks, STATE.ai.geminiModel);
+      const pageNote = IMPORT_PAGE_OFFSETS.length ? `${IMPORT_PAGE_OFFSETS.length} pages` : `${text.length.toLocaleString()} characters`;
+      html += `<p class="small">This document is approximately ${pageNote} — it will be reviewed in ${chunks.length} chunks to cover the full text. Estimated cost: ~$${cost.costUSD.toFixed(3)} for this document (based on ${STATE.ai.geminiModel} published per-token rates; actual cost/provider depends on your AI Settings). If you already have a summary of this contract, you can paste it instead for a faster, cheaper review.</p>
+      <div class="row">
+        <button class="btn small gold" id="btnRunFullReview">Run full chunked review (${chunks.length} chunks)</button>
+        <button class="btn small outline" id="btnRunQuickReview">Quick review (first chunk only)</button>
+        <button class="btn small outline" id="btnToggleSummary">${DOC_REVIEW_USE_SUMMARY?'Cancel summary':'Use a summary instead'}</button>
+      </div>
+      ${DOC_REVIEW_USE_SUMMARY ? `<div class="field" style="margin-top:8px;"><label>Paste a summary of this contract</label><textarea id="docReviewSummaryText" placeholder="Paste a shorter summary here…"></textarea>
+      <button class="btn small gold" id="btnRunSummaryReview" style="margin-top:6px;">Review this summary</button></div>` : ''}`;
+    }
+  }else{
+    const f = DOC_REVIEW_RESULT.final;
+    const li = arr => arr.length ? arr.map(x=>`<li>${esc(x.item)}${x.pageRange?` <span class="muted small">(${esc(x.pageRange)})</span>`:''}</li>`).join('') : '<li class="muted small">None found</li>';
+    html += `<p class="small muted">Mode: ${DOC_REVIEW_RESULT.mode} — reviewed ${DOC_REVIEW_RESULT.chunksReviewed} of ${DOC_REVIEW_RESULT.chunkCount} chunk(s).</p>
+    <p><b>Parties:</b> ${esc(f.parties.join('; ')||'—')}</p>
+    <p><b>Term:</b> ${esc(f.term||'—')}</p>
+    <p style="margin-bottom:4px;"><b>Financial mechanics:</b></p><ul>${li(f.financialMechanics)}</ul>
+    <p style="margin-bottom:4px;"><b>Obligations / SLAs:</b></p><ul>${li(f.obligationsSlas)}</ul>
+    <p style="margin-bottom:4px;"><b>Risk flags:</b></p><ul>${li(f.riskFlags)}</ul>
+    <div class="row">
+      <button class="btn small gold" id="btnApplyDocReviewTier">Apply suggested tier</button>
+      <button class="btn small outline" id="btnApplyDocReviewObligations">Add obligations/SLAs to Register</button>
+      <button class="btn small danger" id="btnClearDocReview">Discard review</button>
+    </div>`;
+  }
+  return html;
 }
 function statusBadge(row){
   if(row.status==='Complete') return `<span class="badge ok">Complete</span>`;
@@ -2238,11 +2283,13 @@ function wireRegister(){
     try{
       let text = '';
       let truncNote = '';
+      let pageOffsets = [];
       if(/\.pdf$/i.test(file.name)){
         await ensurePdfLib();
         const arrayBuffer = await file.arrayBuffer();
         const res = await extractTextFromPdf(arrayBuffer);
         text = res.text;
+        pageOffsets = res.pageOffsets;
         if(res.totalPages > res.readPages){
           truncNote = ` ⚠ Read first ${res.readPages} of ${res.totalPages} pages — later pages were not scanned; obligations/KPIs/tiering there won't be detected.`;
         }
@@ -2253,6 +2300,10 @@ function wireRegister(){
         text = result.value || '';
       }
       IMPORT_RAW_TEXT = text;
+      IMPORT_PAGE_OFFSETS = pageOffsets;
+      DOC_REVIEW_RESULT = null;
+      DOC_REVIEW_STATUS = '';
+      DOC_REVIEW_USE_SUMMARY = false;
       const obligationResult = extractObligationCandidates(text);
       const kpiResult = extractKpiSlaCandidates(text);
       IMPORT_STAGING = obligationResult.candidates;
@@ -2278,6 +2329,64 @@ function wireRegister(){
     SUGGESTED_TIER = await aiSuggestTier(IMPORT_RAW_TEXT);
     render();
   });
+  const runDocReviewBtn = document.getElementById('btnRunDocReview');
+  if(runDocReviewBtn) runDocReviewBtn.addEventListener('click', async ()=>{
+    DOC_REVIEW_STATUS = 'Reviewing document…'; render();
+    try{
+      DOC_REVIEW_RESULT = await runDocumentReview(IMPORT_RAW_TEXT, IMPORT_PAGE_OFFSETS, {});
+      DOC_REVIEW_STATUS = '';
+    }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
+    render();
+  });
+  const runFullReviewBtn = document.getElementById('btnRunFullReview');
+  if(runFullReviewBtn) runFullReviewBtn.addEventListener('click', async ()=>{
+    const totalChunks = chunkTextForReview(IMPORT_RAW_TEXT, AI_REVIEW_CHUNK_SIZE).length;
+    DOC_REVIEW_STATUS = `Reviewing chunk 1 of ${totalChunks}…`; render();
+    try{
+      DOC_REVIEW_RESULT = await runDocumentReview(IMPORT_RAW_TEXT, IMPORT_PAGE_OFFSETS, {
+        onProgress:(done,total)=>{ DOC_REVIEW_STATUS = `Reviewing chunk ${done} of ${total}…`; render(); }
+      });
+      DOC_REVIEW_STATUS = '';
+    }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
+    render();
+  });
+  const runQuickReviewBtn = document.getElementById('btnRunQuickReview');
+  if(runQuickReviewBtn) runQuickReviewBtn.addEventListener('click', async ()=>{
+    DOC_REVIEW_STATUS = 'Running quick review (first chunk only)…'; render();
+    try{
+      DOC_REVIEW_RESULT = await runDocumentReview(IMPORT_RAW_TEXT, IMPORT_PAGE_OFFSETS, {quickReview:true});
+      DOC_REVIEW_STATUS = '';
+    }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
+    render();
+  });
+  const toggleSummaryBtn = document.getElementById('btnToggleSummary');
+  if(toggleSummaryBtn) toggleSummaryBtn.addEventListener('click',()=>{ DOC_REVIEW_USE_SUMMARY = !DOC_REVIEW_USE_SUMMARY; render(); });
+  const runSummaryReviewBtn = document.getElementById('btnRunSummaryReview');
+  if(runSummaryReviewBtn) runSummaryReviewBtn.addEventListener('click', async ()=>{
+    const summaryText = (document.getElementById('docReviewSummaryText').value||'').trim();
+    if(!summaryText){ alert('Paste a summary first.'); return; }
+    DOC_REVIEW_STATUS = 'Reviewing summary…'; render();
+    try{
+      DOC_REVIEW_RESULT = await runDocumentReview(summaryText, [], {});
+      DOC_REVIEW_STATUS = '';
+      DOC_REVIEW_USE_SUMMARY = false;
+    }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
+    render();
+  });
+  const applyDocReviewTierBtn = document.getElementById('btnApplyDocReviewTier');
+  if(applyDocReviewTierBtn) applyDocReviewTierBtn.addEventListener('click',()=>{
+    SUGGESTED_TIER = DOC_REVIEW_RESULT.final.suggestedTier;
+    render();
+  });
+  const applyDocReviewObligationsBtn = document.getElementById('btnApplyDocReviewObligations');
+  if(applyDocReviewObligationsBtn) applyDocReviewObligationsBtn.addEventListener('click',()=>{
+    DOC_REVIEW_RESULT.final.obligationsSlas.forEach(x=>{
+      addCandidateToRegister(x.item + (x.pageRange ? ` (${x.pageRange})` : ''));
+    });
+    applyDocReviewObligationsBtn.textContent = 'Added ✓'; applyDocReviewObligationsBtn.disabled = true;
+  });
+  const clearDocReviewBtn = document.getElementById('btnClearDocReview');
+  if(clearDocReviewBtn) clearDocReviewBtn.addEventListener('click',()=>{ DOC_REVIEW_RESULT=null; DOC_REVIEW_STATUS=''; render(); });
   const addTierBtn = document.getElementById('btnAddSuggestedTier');
   if(addTierBtn) addTierBtn.addEventListener('click',()=>{
     STATE.tieringBulk.push({id:uid(), name: IMPORT_FILE_NAME||'Imported contract', ...SUGGESTED_TIER});
@@ -2385,6 +2494,165 @@ async function aiExtractObligations(rawText){
   const result = await askAI(prompt);
   return result.split('\n').map(s=>s.replace(/^[-•\d.]+\s*/,'').trim()).filter(s=>s.length>10 && s.length<300).slice(0,40);
 }
+
+/* ---------- full-document AI review: chunked map-reduce ---------- */
+const AI_REVIEW_CHUNK_SIZE = 6000; // single-call threshold, matches the old text.slice(0,6000) cutoff
+// Published Gemini per-1M-token rates (USD), approximate as of this writing — used only to
+// compute a live cost ESTIMATE from actual chunk sizes, never a hardcoded flat total. Update
+// if provider pricing changes; unrecognised models fall back to the gemini-2.0-flash rate.
+const GEMINI_PRICING = {
+  'gemini-2.0-flash': {inputPerMTok:0.10, outputPerMTok:0.40},
+  'gemini-2.0-flash-lite': {inputPerMTok:0.075, outputPerMTok:0.30},
+  'gemini-2.5-flash': {inputPerMTok:0.30, outputPerMTok:2.50},
+  'gemini-2.5-pro': {inputPerMTok:1.25, outputPerMTok:10.00}
+};
+const CHARS_PER_TOKEN_EST = 4; // standard rough approximation for English text
+const CHUNK_MAP_OUTPUT_TOKENS_EST = 300; // structured partial summary per chunk
+const CHUNK_REDUCE_OUTPUT_TOKENS_EST = 800; // final structured review
+const CHUNK_PROMPT_OVERHEAD_CHARS = 400; // instructions wrapped around each chunk's text
+function geminiPricingFor(modelName){ return GEMINI_PRICING[modelName] || GEMINI_PRICING['gemini-2.0-flash']; }
+function estimateChunkedReviewCost(chunks, modelName){
+  const pricing = geminiPricingFor(modelName);
+  let inputChars=0, outputTokens=0;
+  chunks.forEach(c=>{ inputChars += c.text.length + CHUNK_PROMPT_OVERHEAD_CHARS; outputTokens += CHUNK_MAP_OUTPUT_TOKENS_EST; });
+  inputChars += chunks.length*CHUNK_MAP_OUTPUT_TOKENS_EST*CHARS_PER_TOKEN_EST + CHUNK_PROMPT_OVERHEAD_CHARS; // reduce call input
+  outputTokens += CHUNK_REDUCE_OUTPUT_TOKENS_EST;
+  const inputTokens = inputChars/CHARS_PER_TOKEN_EST;
+  const costUSD = (inputTokens/1e6)*pricing.inputPerMTok + (outputTokens/1e6)*pricing.outputPerMTok;
+  return {inputTokensEst:Math.round(inputTokens), outputTokensEst:Math.round(outputTokens), costUSD};
+}
+function pageForOffset(offset, pageOffsets){
+  if(!pageOffsets || !pageOffsets.length) return null;
+  let page=1;
+  for(let i=0;i<pageOffsets.length;i++){ if(pageOffsets[i]<=offset) page=i+1; else break; }
+  return page;
+}
+function pageRangeLabel(start, end, pageOffsets){
+  const p1 = pageForOffset(start, pageOffsets);
+  if(p1==null) return '';
+  const p2 = pageForOffset(Math.max(start,end-1), pageOffsets);
+  return p1===p2 ? `p.${p1}` : `p.${p1}–${p2}`;
+}
+// Splits text into ~chunkSize chunks, breaking at paragraph/page boundaries (\n+) where
+// possible; only falls back to sentence-boundary splitting for a single block that itself
+// exceeds chunkSize. Tracks each chunk's [start,end) character offset in the original text
+// so callers can map chunks back to an approximate page range via pageOffsets.
+function chunkTextForReview(text, chunkSize){
+  chunkSize = chunkSize || AI_REVIEW_CHUNK_SIZE;
+  if(text.length<=chunkSize) return [{text, start:0, end:text.length}];
+  const units=[];
+  text.split(/\n+/).forEach(block=>{
+    block = block.trim();
+    if(!block) return;
+    if(block.length<=chunkSize){ units.push(block); return; }
+    const parts = block.split(/(?<=[.;])\s+/);
+    let buf='';
+    parts.forEach(p=>{
+      if(buf && (buf.length+1+p.length)>chunkSize){ units.push(buf); buf=p; }
+      else buf = buf ? buf+' '+p : p;
+    });
+    if(buf) units.push(buf);
+  });
+  const chunks=[]; let cur='', curStart=null, searchFrom=0;
+  units.forEach(u=>{
+    let idx = text.indexOf(u, searchFrom);
+    if(idx===-1) idx = searchFrom;
+    const uStart=idx, uEnd=idx+u.length;
+    searchFrom = uEnd;
+    if(curStart===null) curStart=uStart;
+    if(cur && (cur.length+1+u.length)>chunkSize){
+      chunks.push({text:cur, start:curStart, end:uStart});
+      cur=u; curStart=uStart;
+    }else{
+      cur = cur ? cur+' '+u : u;
+    }
+  });
+  if(cur) chunks.push({text:cur, start:curStart, end:text.length});
+  return chunks;
+}
+function heuristicChunkSummary(chunkText, range){
+  const obligations = extractObligationCandidates(chunkText).candidates.slice(0,10);
+  const kpisSlas = extractKpiSlaCandidates(chunkText).candidates.slice(0,10);
+  return {range, parties:[], obligations, kpisSlas, financialTerms:[], riskFlags:[]};
+}
+function heuristicFinalReview(text){
+  const tier = heuristicTierFromText(text||'');
+  const obligations = extractObligationCandidates(text||'').candidates.slice(0,15).map(item=>({item, pageRange:''}));
+  const kpis = extractKpiSlaCandidates(text||'').candidates.slice(0,15).map(item=>({item, pageRange:''}));
+  return {parties:[], term:'', financialMechanics:[], obligationsSlas:[...obligations,...kpis], riskFlags:[], suggestedTier:tier};
+}
+function parseFinalReviewJson(raw, fallbackText){
+  try{
+    const cleaned = raw.replace(/```json|```/g,'').trim();
+    const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+    const parsed = JSON.parse(cleaned.slice(s,e+1));
+    const normItems = arr => Array.isArray(arr) ? arr.map(x=> typeof x==='string' ? {item:x, pageRange:''} : {item:String(x.item||''), pageRange:x.pageRange?String(x.pageRange):''}) : [];
+    return {
+      parties: Array.isArray(parsed.parties) ? parsed.parties.map(String) : [],
+      term: parsed.term ? String(parsed.term) : '',
+      financialMechanics: normItems(parsed.financialMechanics),
+      obligationsSlas: normItems(parsed.obligationsSlas),
+      riskFlags: normItems(parsed.riskFlags),
+      suggestedTier: {
+        value:clampScore(parsed.suggestedTier&&parsed.suggestedTier.value), risk:clampScore(parsed.suggestedTier&&parsed.suggestedTier.risk),
+        criticality:clampScore(parsed.suggestedTier&&parsed.suggestedTier.criticality), impact:clampScore(parsed.suggestedTier&&parsed.suggestedTier.impact)
+      }
+    };
+  }catch(e){
+    return heuristicFinalReview(fallbackText);
+  }
+}
+async function reviewDocumentSingleCall(text, pageOffsets){
+  const prompt = `Review this contract document and produce a structured summary. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\nOnly include a pageRange per item if reasonably inferable from context; otherwise use an empty string.\n\nDocument text:\n${text}`;
+  let raw;
+  try{ raw = await askAI(prompt); }catch(e){ return heuristicFinalReview(text); }
+  return parseFinalReviewJson(raw, text);
+}
+async function mapChunkForReview(chunk, index, total, pageOffsets){
+  const range = pageRangeLabel(chunk.start, chunk.end, pageOffsets) || `part ${index+1} of ${total}`;
+  const prompt = `You are reviewing PART ${index+1} of ${total} of a single contract document (approx. ${range}). Extract ONLY what is explicitly present in this excerpt. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...strings...],"obligations":[...strings...],"kpisSlas":[...strings...],"financialTerms":[...strings...],"riskFlags":[...strings...]}\nIf a category has nothing in this excerpt, return an empty array for it.\n\nExcerpt:\n${chunk.text}`;
+  let raw;
+  try{ raw = await askAI(prompt); }catch(e){ return heuristicChunkSummary(chunk.text, range); }
+  try{
+    const cleaned = raw.replace(/```json|```/g,'').trim();
+    const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+    const parsed = JSON.parse(cleaned.slice(s,e+1));
+    const norm = k => Array.isArray(parsed[k]) ? parsed[k].map(String) : [];
+    return {range, parties:norm('parties'), obligations:norm('obligations'), kpisSlas:norm('kpisSlas'), financialTerms:norm('financialTerms'), riskFlags:norm('riskFlags')};
+  }catch(e){
+    return heuristicChunkSummary(chunk.text, range);
+  }
+}
+async function reduceChunkSummaries(partials, fallbackFullText){
+  const packed = partials.map(p=>`[${p.range}]\nParties: ${p.parties.join('; ')}\nObligations: ${p.obligations.join('; ')}\nKPIs/SLAs: ${p.kpisSlas.join('; ')}\nFinancial terms: ${p.financialTerms.join('; ')}\nRisk flags: ${p.riskFlags.join('; ')}`).join('\n\n');
+  const prompt = `You are combining partial summaries of DIFFERENT SECTIONS of the SAME single contract document into one final structured review. Each section below is labeled with its approximate page range or part number. Deduplicate overlapping items across sections, but KEEP each item's page-range attribution. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\n\nSection summaries:\n${packed}`;
+  let raw;
+  try{ raw = await askAI(prompt); }catch(e){ return heuristicFinalReview(fallbackFullText); }
+  return parseFinalReviewJson(raw, fallbackFullText);
+}
+// Orchestrator: <=1 chunk -> exactly one AI call (today's behavior, no chunk/cost UI needed).
+// quickReview -> one AI call on the first chunk only (fast/cheap, same as the old truncated
+// behavior). Otherwise -> full chunked map-reduce covering the whole document.
+async function runDocumentReview(text, pageOffsets, opts={}){
+  const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
+  if(chunks.length<=1){
+    const final = await reviewDocumentSingleCall(text, pageOffsets);
+    return {final, mode:'single', chunkCount:1, chunksReviewed:1};
+  }
+  if(opts.quickReview){
+    const slice = text.slice(0, AI_REVIEW_CHUNK_SIZE);
+    const final = await reviewDocumentSingleCall(slice, pageOffsets);
+    return {final, mode:'quick', chunkCount:chunks.length, chunksReviewed:1};
+  }
+  const partials=[];
+  for(let i=0;i<chunks.length;i++){
+    partials.push(await mapChunkForReview(chunks[i], i, chunks.length, pageOffsets));
+    if(opts.onProgress) opts.onProgress(i+1, chunks.length);
+  }
+  const final = await reduceChunkSummaries(partials, text);
+  return {final, mode:'chunked', chunkCount:chunks.length, chunksReviewed:chunks.length};
+}
+
 function addCandidateToRegister(text){
   STATE.register.push({id:uid(), type: /service level|sla\b/i.test(text)?'SLA':'Obligation', contract:'', description:text, owner:'', dueDate:'', recurrence:'One-off', status:'Open'});
   saveState();
