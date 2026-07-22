@@ -440,7 +440,7 @@ const DEFAULT_STATE = {
   governanceSummary:'',
   scorecard:{},
   framework:{industry:'', spend:'', maturity:'Ad hoc', summaryText:''},
-  activeContract:{name:'', text:'', truncNote:''}
+  activeContract:{name:'', text:'', truncNote:'', pageOffsets:[]}
 };
 let STATE = loadState();
 
@@ -1435,35 +1435,19 @@ function wireRebates(){
     rebatesAiBtn.addEventListener('click', async ()=>{
       if(!STATE.activeContract || !STATE.activeContract.text) return;
       rebatesAiBtn.disabled = true; rebatesAiBtn.textContent = 'Extracting…';
-      
-      if (STATE.ai.mode === 'sandbox') {
-        const lower = STATE.activeContract.text.toLowerCase();
-        if (lower.includes('rebate') || lower.includes('volume discount')) {
-          STATE.rebates.push({id:uid(), contractName:STATE.activeContract.name, tierName:'Volume rebate', threshold:'>$250,000 spend', ratePct:3, spendToDate:0, status:'Open'});
-        } else {
-          alert("No rebate terms detected in contract text (offline scan).");
+      try{
+        const { final } = await chooseAndRunDocumentReview();
+        if(!final.rebateTiers.length){
+          alert('No rebate terms detected in contract text.');
+        }else{
+          final.rebateTiers.forEach(r=>{
+            STATE.rebates.push({id:uid(), contractName:STATE.activeContract.name, tierName:r.tierName||'Rebate tier', threshold:r.threshold||'', ratePct:Number(r.ratePct)||0, spendToDate:0, status:'Open'});
+          });
+          saveState();
+          render();
         }
-        saveState();
-        render();
-        rebatesAiBtn.disabled = false; rebatesAiBtn.textContent = 'AI Extract Rebates';
-        return;
-      }
-      
-      const prompt = `Extract all volume rebate tiers, spend thresholds, and rebate rates from this contract. Return ONLY a JSON array, no commentary or markdown formatting: [{"tierName": "Tier Name (e.g. Volume Tier)", "threshold": "Threshold range (e.g. $500,001 - $1,000,000)", "ratePct": N (integer percentage, e.g. 2)}]\n\nText:\n${STATE.activeContract.text.slice(0, 6000)}`;
-      
-      try {
-        const res = await askAI(prompt);
-        const cleaned = res.replace(/```json|```/g,'').trim();
-        const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
-        const parsed = JSON.parse(cleaned.slice(s,e+1));
-        
-        parsed.forEach(r => {
-          STATE.rebates.push({id:uid(), contractName:STATE.activeContract.name, tierName:r.tierName, threshold:r.threshold, ratePct:Number(r.ratePct)||0, spendToDate:0, status:'Open'});
-        });
-        saveState();
-        render();
-      } catch(err) {
-        alert("Extraction failed: " + err.message);
+      }catch(err){
+        alert('Extraction failed: ' + err.message);
       }
       rebatesAiBtn.disabled = false; rebatesAiBtn.textContent = 'AI Extract Rebates';
     });
@@ -1505,7 +1489,6 @@ let IMPORT_STATUS_MSG = '';
 let IMPORT_TRUNC_NOTE = '';
 let IMPORT_SKIPPED_LEN = 0;
 let KPI_SKIPPED_LEN = 0;
-let IMPORT_PAGE_OFFSETS = [];
 let DOC_REVIEW_RESULT = null;
 let DOC_REVIEW_STATUS = '';
 let DOC_REVIEW_USE_SUMMARY = false;
@@ -1604,7 +1587,7 @@ function renderRegister(){
   </div>`;
 }
 function renderDocReviewPanel(){
-  const text = IMPORT_RAW_TEXT;
+  const text = STATE.activeContract.text;
   const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
   const isLong = chunks.length>1;
   let html = `<hr class="divider"><h3>AI document review (full text)</h3>
@@ -1616,7 +1599,8 @@ function renderDocReviewPanel(){
       <button class="btn small gold" id="btnRunDocReview">Run AI document review</button>`;
     }else{
       const cost = estimateChunkedReviewCost(chunks, STATE.ai.geminiModel);
-      const pageNote = IMPORT_PAGE_OFFSETS.length ? `${IMPORT_PAGE_OFFSETS.length} pages` : `${text.length.toLocaleString()} characters`;
+      const pageOffsets = STATE.activeContract.pageOffsets || [];
+      const pageNote = pageOffsets.length ? `${pageOffsets.length} pages` : `${text.length.toLocaleString()} characters`;
       html += `<p class="small">This document is approximately ${pageNote} — it will be reviewed in ${chunks.length} chunks to cover the full text. Estimated cost: ~$${cost.costUSD.toFixed(3)} for this document (based on ${STATE.ai.geminiModel} published per-token rates; actual cost/provider depends on your AI Settings). If you already have a summary of this contract, you can paste it instead for a faster, cheaper review.</p>
       <div class="row">
         <button class="btn small gold" id="btnRunFullReview">Run full chunked review (${chunks.length} chunks)</button>
@@ -1629,11 +1613,16 @@ function renderDocReviewPanel(){
   }else{
     const f = DOC_REVIEW_RESULT.final;
     const li = arr => arr.length ? arr.map(x=>`<li>${esc(x.item)}${x.pageRange?` <span class="muted small">(${esc(x.pageRange)})</span>`:''}</li>`).join('') : '<li class="muted small">None found</li>';
+    const liKpi = arr => arr.length ? arr.map(x=>`<li>${esc(x.name)}${x.target?` — target ${esc(x.target)}`:''}${x.pageRange?` <span class="muted small">(${esc(x.pageRange)})</span>`:''}</li>`).join('') : '<li class="muted small">None found</li>';
+    const liRebate = arr => arr.length ? arr.map(x=>`<li>${esc(x.tierName)}${x.threshold?` — ${esc(x.threshold)}`:''}${x.ratePct?` (${x.ratePct}%)`:''}${x.pageRange?` <span class="muted small">(${esc(x.pageRange)})</span>`:''}</li>`).join('') : '<li class="muted small">None found</li>';
     html += `<p class="small muted">Mode: ${DOC_REVIEW_RESULT.mode} — reviewed ${DOC_REVIEW_RESULT.chunksReviewed} of ${DOC_REVIEW_RESULT.chunkCount} chunk(s).</p>
     <p><b>Parties:</b> ${esc(f.parties.join('; ')||'—')}</p>
     <p><b>Term:</b> ${esc(f.term||'—')}</p>
     <p style="margin-bottom:4px;"><b>Financial mechanics:</b></p><ul>${li(f.financialMechanics)}</ul>
     <p style="margin-bottom:4px;"><b>Obligations / SLAs:</b></p><ul>${li(f.obligationsSlas)}</ul>
+    <p style="margin-bottom:4px;"><b>KPIs:</b></p><ul>${liKpi(f.kpis)}</ul>
+    <p style="margin-bottom:4px;"><b>SLAs:</b></p><ul>${liKpi(f.slas)}</ul>
+    <p style="margin-bottom:4px;"><b>Rebate tiers:</b></p><ul>${liRebate(f.rebateTiers)}</ul>
     <p style="margin-bottom:4px;"><b>Risk flags:</b></p><ul>${li(f.riskFlags)}</ul>
     <div class="row">
       <button class="btn small gold" id="btnApplyDocReviewTier">Apply suggested tier</button>
@@ -1957,11 +1946,13 @@ function wireTiering(){
       try{
         let text = '';
         let truncNote = '';
+        let newPageOffsets = [];
         if(/\.pdf$/i.test(file.name)){
           await ensurePdfLib();
           const arrayBuffer = await file.arrayBuffer();
           const res = await extractTextFromPdf(arrayBuffer);
           text = res.text;
+          newPageOffsets = res.pageOffsets;
           if(res.totalPages > res.readPages){
             truncNote = `Read first ${res.readPages} of ${res.totalPages} pages.`;
           }
@@ -1975,27 +1966,37 @@ function wireTiering(){
         const newName = file.name.replace(/\.(docx|pdf)$/i,'');
         let combinedText = text;
         let combinedName = newName;
-        
+        let combinedPageOffsets = newPageOffsets;
+
         if (appendMode && STATE.activeContract && STATE.activeContract.text) {
-          combinedText = STATE.activeContract.text + `\n\n--- Document: ${newName} ---\n` + text;
+          const prefix = STATE.activeContract.text + `\n\n--- Document: ${newName} ---\n`;
+          combinedText = prefix + text;
           combinedName = STATE.activeContract.name + ' + ' + newName;
+          // shift the newly-uploaded document's page offsets by the prefix length so they stay
+          // valid within the combined text, and keep the prior document's own page offsets too.
+          combinedPageOffsets = (STATE.activeContract.pageOffsets || []).concat(newPageOffsets.map(o => o + prefix.length));
         }
 
         const maxLen = 1200000; // Increased to 1.2M characters for at least 2x 300 pages
         if(combinedText.length > maxLen) {
           combinedText = combinedText.slice(0, maxLen);
+          combinedPageOffsets = combinedPageOffsets.filter(o => o < maxLen);
           truncNote = (truncNote ? truncNote + ' ' : '') + 'Truncated to 1.2M chars for storage efficiency.';
         }
-        
+
         STATE.activeContract = {
           name: combinedName,
           text: combinedText,
-          truncNote: truncNote
+          truncNote: truncNote,
+          pageOffsets: combinedPageOffsets
         };
-        
+        DOC_REVIEW_RESULT = null;
+        DOC_REVIEW_STATUS = '';
+        DOC_REVIEW_USE_SUMMARY = false;
+
         status.textContent = 'Analyzing and auto-scoring contract...';
-        const scores = await aiSuggestTier(combinedText);
-        STATE.tieringSingle = scores;
+        const { final } = await chooseAndRunDocumentReview();
+        STATE.tieringSingle = final.suggestedTier;
         STATE.qbr.supplier = STATE.activeContract.name;
         saveState();
         render();
@@ -2007,7 +2008,10 @@ function wireTiering(){
   const clearBtn = document.getElementById('btnClearActiveContract');
   if(clearBtn) {
     clearBtn.addEventListener('click', ()=>{
-      STATE.activeContract = {name:'', text:'', truncNote:''};
+      STATE.activeContract = {name:'', text:'', truncNote:'', pageOffsets:[]};
+      DOC_REVIEW_RESULT = null;
+      DOC_REVIEW_STATUS = '';
+      DOC_REVIEW_USE_SUMMARY = false;
       saveState();
       render();
     });
@@ -2037,11 +2041,22 @@ function wireFramework(){
     const spend = document.getElementById('fwSpend').value || 'unspecified managed spend';
     const maturity = document.getElementById('fwMaturity').value;
     let prompt = `Write a 150-word executive summary of a Contract Lifecycle Management framework (sections: pre-contract tiering, obligation tracking, KPIs, SLAs, rebate monitoring, change orders, termination, QBR) for a ${industry} organisation with ${spend} managed spend, currently at "${maturity}" maturity. Recommend the top 2 priorities to close leakage first.`;
-    
-    if (STATE.activeContract && STATE.activeContract.text) {
-      prompt = `Write a 150-word CLM executive summary specifically tailored to the active contract "${STATE.activeContract.name}" in the ${industry} industry with ${spend} spend, at "${maturity}" maturity. Highlight key risks, rebate details, and obligations based on this contract excerpt:\n\n${STATE.activeContract.text.slice(0, 5000)}`;
-    }
+
     try{
+      if (STATE.activeContract && STATE.activeContract.text) {
+        out.innerHTML = '<p class="small muted">Reviewing contract…</p>';
+        // Full-document structured review first (same quick/full choice + chunking as elsewhere),
+        // so the narrative below is grounded in the whole document, not just its first ~5000 chars.
+        const { final } = await chooseAndRunDocumentReview();
+        const contextSummary = JSON.stringify({
+          parties: final.parties, term: final.term,
+          financialMechanics: final.financialMechanics.map(x=>x.item),
+          obligationsSlas: final.obligationsSlas.map(x=>x.item),
+          rebateTiers: final.rebateTiers, riskFlags: final.riskFlags.map(x=>x.item)
+        });
+        prompt = `Write a 150-word CLM executive summary specifically tailored to the active contract "${STATE.activeContract.name}" in the ${industry} industry with ${spend} spend, at "${maturity}" maturity. Highlight key risks, rebate details, and obligations. This structured review already covers the full document, not just an excerpt:\n\n${contextSummary}`;
+        out.innerHTML = '<p class="small muted">Drafting…</p>';
+      }
       const text = await askAI(prompt);
       fw.summaryText = text;
       saveState();
@@ -2098,40 +2113,18 @@ function wireQBR(){
     qbrAiBtn.addEventListener('click', async ()=>{
       if(!STATE.activeContract || !STATE.activeContract.text) return;
       qbrAiBtn.disabled = true; qbrAiBtn.textContent = 'Extracting…';
-      
-      if (STATE.ai.mode === 'sandbox') {
-        const candidates = extractKpiSlaCandidates(STATE.activeContract.text);
-        candidates.forEach(c => {
-          q.slas.push({id:uid(), name:c, target:extractTargetNumber(c), actual:'', status:'On track'});
-        });
-        saveState();
-        render();
-        qbrAiBtn.disabled = false; qbrAiBtn.textContent = 'AI Extract KPIs/SLAs';
-        return;
-      }
-      
-      const prompt = `Extract all SLA and KPI commitments from this contract text as a JSON object with this exact format: {"kpis": [{"name": "KPI Name", "target": "Target Value (e.g. 98%)"}], "slas": [{"name": "SLA Name", "target": "Target Value (e.g. 4 hours)"}]}. Return ONLY JSON, no markdown formatting fences or other text.\n\nText:\n${STATE.activeContract.text.slice(0, 6000)}`;
-      
-      try {
-        const res = await askAI(prompt);
-        const cleaned = res.replace(/```json|```/g,'').trim();
-        const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-        const parsed = JSON.parse(cleaned.slice(s,e+1));
-        
-        if (parsed.kpis) {
-          parsed.kpis.forEach(k => {
-            q.kpis.push({id:uid(), name:k.name, target:k.target, actual:'', status:'On track'});
-          });
+      try{
+        const { final } = await chooseAndRunDocumentReview();
+        final.kpis.forEach(k=>{ q.kpis.push({id:uid(), name:k.name, target:k.target, actual:'', status:'On track'}); });
+        final.slas.forEach(k=>{ q.slas.push({id:uid(), name:k.name, target:k.target, actual:'', status:'On track'}); });
+        if(!final.kpis.length && !final.slas.length){
+          alert('No KPI/SLA commitments detected in contract text.');
+        }else{
+          saveState();
+          render();
         }
-        if (parsed.slas) {
-          parsed.slas.forEach(k => {
-            q.slas.push({id:uid(), name:k.name, target:k.target, actual:'', status:'On track'});
-          });
-        }
-        saveState();
-        render();
-      } catch(err) {
-        alert("Extraction failed: " + err.message);
+      }catch(err){
+        alert('Extraction failed: ' + err.message);
       }
       qbrAiBtn.disabled = false; qbrAiBtn.textContent = 'AI Extract KPIs/SLAs';
     });
@@ -2274,56 +2267,8 @@ function wireRegister(){
     exportDocxReal('Obligation & SLA Register', blocks);
   });
 
-  const fileInput = document.getElementById('regImportFile');
-  if(fileInput) fileInput.addEventListener('change', async (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    const status = document.getElementById('regImportStatus');
-    status.textContent = 'Reading document…';
-    IMPORT_FILE_NAME = file.name.replace(/\.(docx|pdf)$/i,'');
-    try{
-      let text = '';
-      let truncNote = '';
-      let pageOffsets = [];
-      if(/\.pdf$/i.test(file.name)){
-        await ensurePdfLib();
-        const arrayBuffer = await file.arrayBuffer();
-        const res = await extractTextFromPdf(arrayBuffer);
-        text = res.text;
-        pageOffsets = res.pageOffsets;
-        if(res.totalPages > res.readPages){
-          truncNote = ` ⚠ Read first ${res.readPages} of ${res.totalPages} pages — later pages were not scanned; obligations/KPIs/tiering there won't be detected.`;
-        }
-      }else{
-        await ensureMammothLib();
-        const arrayBuffer = await file.arrayBuffer();
-        const result = await window.mammoth.extractRawText({arrayBuffer});
-        text = result.value || '';
-      }
-      IMPORT_RAW_TEXT = text;
-      IMPORT_PAGE_OFFSETS = pageOffsets;
-      DOC_REVIEW_RESULT = null;
-      DOC_REVIEW_STATUS = '';
-      DOC_REVIEW_USE_SUMMARY = false;
-      const obligationResult = extractObligationCandidates(text);
-      const kpiResult = extractKpiSlaCandidates(text);
-      IMPORT_STAGING = obligationResult.candidates;
-      KPI_STAGING = kpiResult.candidates;
-      IMPORT_SKIPPED_LEN = obligationResult.skippedForLength;
-      KPI_SKIPPED_LEN = kpiResult.skippedForLength;
-      SUGGESTED_TIER = heuristicTierFromText(text);
-      IMPORT_STATUS_MSG = (IMPORT_STAGING.length || KPI_STAGING.length) ? '' : 'No obligation or KPI/SLA-style clauses matched by keyword scan — try "Refine with AI" or add items manually.';
-      IMPORT_TRUNC_NOTE = truncNote;
-      BANNER_STATE['regImportStatus'] = true; // ensure a fresh import notice is shown open, not left collapsed from a prior file
-      render();
-    }catch(err){
-      IMPORT_STATUS_MSG = '';
-      IMPORT_TRUNC_NOTE = '';
-      IMPORT_SKIPPED_LEN = 0;
-      KPI_SKIPPED_LEN = 0;
-      status.innerHTML = `<span style="color:var(--red);">${esc(err.message)}</span>`;
-    }
-  });
+  // Document upload now happens on the Tiering tab (Step 0) into STATE.activeContract;
+  // this tab reflects it (synced at the top of renderRegister) rather than taking its own upload.
   const refineTierBtn = document.getElementById('btnRefineTierAi');
   if(refineTierBtn) refineTierBtn.addEventListener('click', async ()=>{
     refineTierBtn.disabled = true; refineTierBtn.textContent = 'Refining…';
@@ -2334,17 +2279,17 @@ function wireRegister(){
   if(runDocReviewBtn) runDocReviewBtn.addEventListener('click', async ()=>{
     DOC_REVIEW_STATUS = 'Reviewing document…'; render();
     try{
-      DOC_REVIEW_RESULT = await runDocumentReview(IMPORT_RAW_TEXT, IMPORT_PAGE_OFFSETS, {});
+      DOC_REVIEW_RESULT = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {});
       DOC_REVIEW_STATUS = '';
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
     render();
   });
   const runFullReviewBtn = document.getElementById('btnRunFullReview');
   if(runFullReviewBtn) runFullReviewBtn.addEventListener('click', async ()=>{
-    const totalChunks = chunkTextForReview(IMPORT_RAW_TEXT, AI_REVIEW_CHUNK_SIZE).length;
+    const totalChunks = chunkTextForReview(STATE.activeContract.text, AI_REVIEW_CHUNK_SIZE).length;
     DOC_REVIEW_STATUS = `Reviewing chunk 1 of ${totalChunks}…`; render();
     try{
-      DOC_REVIEW_RESULT = await runDocumentReview(IMPORT_RAW_TEXT, IMPORT_PAGE_OFFSETS, {
+      DOC_REVIEW_RESULT = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {
         onProgress:(done,total)=>{ DOC_REVIEW_STATUS = `Reviewing chunk ${done} of ${total}…`; render(); }
       });
       DOC_REVIEW_STATUS = '';
@@ -2355,7 +2300,7 @@ function wireRegister(){
   if(runQuickReviewBtn) runQuickReviewBtn.addEventListener('click', async ()=>{
     DOC_REVIEW_STATUS = 'Running quick review (first chunk only)…'; render();
     try{
-      DOC_REVIEW_RESULT = await runDocumentReview(IMPORT_RAW_TEXT, IMPORT_PAGE_OFFSETS, {quickReview:true});
+      DOC_REVIEW_RESULT = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {quickReview:true});
       DOC_REVIEW_STATUS = '';
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
     render();
@@ -2579,8 +2524,12 @@ function heuristicChunkSummary(chunkText, range){
 function heuristicFinalReview(text){
   const tier = heuristicTierFromText(text||'');
   const obligations = extractObligationCandidates(text||'').candidates.slice(0,15).map(item=>({item, pageRange:''}));
-  const kpis = extractKpiSlaCandidates(text||'').candidates.slice(0,15).map(item=>({item, pageRange:''}));
-  return {parties:[], term:'', financialMechanics:[], obligationsSlas:[...obligations,...kpis], riskFlags:[], suggestedTier:tier};
+  const kpiSlaCandidates = extractKpiSlaCandidates(text||'').candidates.slice(0,15);
+  const kpis = kpiSlaCandidates.slice(0,10).map(c=>({name:c, target:extractTargetNumber(c), pageRange:''}));
+  const lower = (text||'').toLowerCase();
+  const rebateTiers = (lower.includes('rebate') || lower.includes('volume discount'))
+    ? [{tierName:'Volume rebate (heuristic match — review source)', threshold:'', ratePct:0, pageRange:''}] : [];
+  return {parties:[], term:'', financialMechanics:[], obligationsSlas:[...obligations,...kpiSlaCandidates.map(item=>({item,pageRange:''}))], kpis, slas:[], rebateTiers, riskFlags:[], suggestedTier:tier};
 }
 function parseFinalReviewJson(raw, fallbackText){
   try{
@@ -2588,11 +2537,16 @@ function parseFinalReviewJson(raw, fallbackText){
     const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
     const parsed = JSON.parse(cleaned.slice(s,e+1));
     const normItems = arr => Array.isArray(arr) ? arr.map(x=> typeof x==='string' ? {item:x, pageRange:''} : {item:String(x.item||''), pageRange:x.pageRange?String(x.pageRange):''}) : [];
+    const normKpiSla = arr => Array.isArray(arr) ? arr.map(x=>({name:String((x&&x.name)||''), target:String((x&&x.target)||''), pageRange:(x&&x.pageRange)?String(x.pageRange):''})) : [];
+    const normRebates = arr => Array.isArray(arr) ? arr.map(x=>({tierName:String((x&&x.tierName)||''), threshold:String((x&&x.threshold)||''), ratePct:Number(x&&x.ratePct)||0, pageRange:(x&&x.pageRange)?String(x.pageRange):''})) : [];
     return {
       parties: Array.isArray(parsed.parties) ? parsed.parties.map(String) : [],
       term: parsed.term ? String(parsed.term) : '',
       financialMechanics: normItems(parsed.financialMechanics),
       obligationsSlas: normItems(parsed.obligationsSlas),
+      kpis: normKpiSla(parsed.kpis),
+      slas: normKpiSla(parsed.slas),
+      rebateTiers: normRebates(parsed.rebateTiers),
       riskFlags: normItems(parsed.riskFlags),
       suggestedTier: {
         value:clampScore(parsed.suggestedTier&&parsed.suggestedTier.value), risk:clampScore(parsed.suggestedTier&&parsed.suggestedTier.risk),
@@ -2604,7 +2558,7 @@ function parseFinalReviewJson(raw, fallbackText){
   }
 }
 async function reviewDocumentSingleCall(text, pageOffsets){
-  const prompt = `Review this contract document and produce a structured summary. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\nOnly include a pageRange per item if reasonably inferable from context; otherwise use an empty string.\n\nDocument text:\n${text}`;
+  const prompt = `Review this contract document and produce a structured summary. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"kpis":[{"name":"...","target":"...","pageRange":"..."}],"slas":[{"name":"...","target":"...","pageRange":"..."}],"rebateTiers":[{"tierName":"...","threshold":"...","ratePct":N,"pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\nOnly include a pageRange per item if reasonably inferable from context; otherwise use an empty string. If a category has nothing in the document, return an empty array for it.\n\nDocument text:\n${text}`;
   let raw;
   try{ raw = await askGemini(prompt); }catch(e){ return heuristicFinalReview(text); }
   return parseFinalReviewJson(raw, text);
@@ -2626,7 +2580,7 @@ async function mapChunkForReview(chunk, index, total, pageOffsets){
 }
 async function reduceChunkSummaries(partials, fallbackFullText){
   const packed = partials.map(p=>`[${p.range}]\nParties: ${p.parties.join('; ')}\nObligations: ${p.obligations.join('; ')}\nKPIs/SLAs: ${p.kpisSlas.join('; ')}\nFinancial terms: ${p.financialTerms.join('; ')}\nRisk flags: ${p.riskFlags.join('; ')}`).join('\n\n');
-  const prompt = `You are combining partial summaries of DIFFERENT SECTIONS of the SAME single contract document into one final structured review. Each section below is labeled with its approximate page range or part number. Deduplicate overlapping items across sections, but KEEP each item's page-range attribution. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\n\nSection summaries:\n${packed}`;
+  const prompt = `You are combining partial summaries of DIFFERENT SECTIONS of the SAME single contract document into one final structured review. Each section below is labeled with its approximate page range or part number. Deduplicate overlapping items across sections, but KEEP each item's page-range attribution. Where the "KPIs/SLAs" and "Financial terms" lines contain KPI/SLA targets or rebate/volume-discount tiers, structure them into the kpis/slas/rebateTiers fields below rather than leaving them as loose text. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"kpis":[{"name":"...","target":"...","pageRange":"..."}],"slas":[{"name":"...","target":"...","pageRange":"..."}],"rebateTiers":[{"tierName":"...","threshold":"...","ratePct":N,"pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\nIf a category has nothing across all sections, return an empty array for it.\n\nSection summaries:\n${packed}`;
   let raw;
   try{ raw = await askGemini(prompt); }catch(e){ return heuristicFinalReview(fallbackFullText); }
   return parseFinalReviewJson(raw, fallbackFullText);
@@ -2652,6 +2606,23 @@ async function runDocumentReview(text, pageOffsets, opts={}){
   }
   const final = await reduceChunkSummaries(partials, text);
   return {final, mode:'chunked', chunkCount:chunks.length, chunksReviewed:chunks.length};
+}
+// Shared entry point for any feature that wants to run a review of the active contract and
+// needs the same quick-review vs full-chunked-review choice the main "AI document review"
+// panel offers. For a short document there's nothing to choose (single call either way). For
+// a long document, asks once via confirm() and reuses the exact same runDocumentReview engine
+// (chunking, cost math, Gemini-forced calls, heuristic fallback) as the main panel.
+async function chooseAndRunDocumentReview(){
+  const text = STATE.activeContract.text;
+  const pageOffsets = STATE.activeContract.pageOffsets;
+  const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
+  let quickReview = false;
+  if(chunks.length>1){
+    const cost = estimateChunkedReviewCost(chunks, STATE.ai.geminiModel);
+    const runFull = confirm(`This document will be reviewed in ${chunks.length} chunks to cover the full text (est. cost ~$${cost.costUSD.toFixed(3)}, ${STATE.ai.geminiModel} rates).\n\nOK = full review (covers the whole document).\nCancel = quick review (first section only, faster/cheaper, partial coverage).`);
+    quickReview = !runFull;
+  }
+  return runDocumentReview(text, pageOffsets, {quickReview});
 }
 
 function addCandidateToRegister(text){
