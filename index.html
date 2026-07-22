@@ -1187,6 +1187,7 @@ function renderQBR(){
   const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>QBR Template</h2>
+  <p style="margin:-6px 0 12px;">${active ? `<span class="badge ok" style="padding: 6px 10px;">📄 Active: ${esc(STATE.activeContract.name)}</span>` : '<span class="small muted">No active contract loaded — upload one on the 0 · Tiering tab to enable AI Extract.</span>'}</p>
   ${collapsibleBanner('qbrTools', '📄 Reports & AI tools', `<div class="row" style="align-items:center;">
       <button class="btn gold" id="btnQbrDraft">AI draft QBR narrative</button>
       <button class="btn outline" id="btnQbrExport">Export QBR to Word</button>
@@ -1405,6 +1406,7 @@ function renderRebates(){
   const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>Rebate Monitoring</h2>
+  <p style="margin:-6px 0 6px;">${active ? `<span class="badge ok" style="padding: 6px 10px;">📄 Active: ${esc(STATE.activeContract.name)}</span>` : '<span class="small muted">No active contract loaded — upload one on the 0 · Tiering tab to enable AI Extract.</span>'}</p>
   <p class="muted">Track tier thresholds against actual spend — accrued entitlement is calculated live from what you earn, not typed in separately.</p>
   ${rows.length ? `<div class="card"><h3>Accrued entitlement by tier</h3><div id="chartRebateBar" style="min-height:${Math.max(rows.length*30,120)}px;"></div></div>` : ''}
   <div class="card">
