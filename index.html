@@ -207,7 +207,7 @@ const GUIDE_TIPS = {
   rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.','If a contract is active, "AI Extract Rebates" pulls rebate tiers straight from it — same quick vs. full review choice as elsewhere for long documents.'],
   register:['One register for obligations, SLAs, and change orders — filter by type. Status auto-flags overdue items by due date.','Upload the contract once on the 0 · Tiering tab (Step 0) — this tab reflects it automatically under "Contract Analysis & Staging," with candidate obligation/SLA clauses staged for your review.','The "AI document review" panel below runs a full structured review of the active contract — long documents (over ~6,000 characters) show a chunk-count and cost estimate first, with a choice between a full chunked review (covers the whole document) or a quick first-section-only pass.'],
   coverage:['Three logs in one place: category spend coverage, stakeholder feedback, and supplier collaboration opportunities.','% spend under contract here feeds the Governance rollup — keep it current, it\'s the headline leakage indicator.'],
-  scorecard:['Score your organisation 1–5 across each dimension. This feeds the Governance rollup.','Re-run quarterly to track maturity trend.'],
+  scorecard:['Score your organisation 1–5 across each dimension. This feeds the Governance rollup.','Re-run quarterly to track maturity trend.','This maturity assessment is CLM Suite\'s own model — 15 questions across 6 dimensions. It\'s informed by, but not copied from, CIPS/Hackett/WorldCC research; see the Framework tab for the specific benchmarks.'],
   governance:['This is the CPO-facing rollup: spend coverage, tier mix, overdue obligations, maturity gaps — the value-leak view.','Everything here is computed live from the other tabs.','PowerPoint deck export needs internet to load the library once per session.'],
   settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/QBR/Rebates/Register) always uses Gemini directly for these calls, regardless of the provider selected here — that keeps its cost estimate accurate. It still falls back to the offline heuristic if no Gemini key is set.']
 };
@@ -261,11 +261,11 @@ Standard template auto-populated from KPI/SLA/spend/risk/rebate data. Intensity 
 Structured post-QBR stakeholder surveys tied to specific KPIs, not generic satisfaction checks. A spend cube mapped against the contract repository gives % of spend under active contract. A category × contract-status heatmap surfaces white space and prioritises where to build coverage next. Collaboration opportunities — joint business planning, innovation logs, gain-share — should be surfaced directly from QBR data for top-tier suppliers.
 
 ## Best Practice Reference Points
-**CIPS** frames contract management as a distinct post-award competency — implementation, ongoing management, review, close-out — with strong emphasis on relationship management and risk, not just compliance administration.
+**CIPS's Contract Management Cycle** frames contract management as a distinct post-award competency — implementation, ongoing management, review, close-out — with strong emphasis on relationship management and risk, not just compliance administration.
 
-**Hackett Group** benchmarks % spend under management, contract compliance rate, amendment cycle time, and % obligations tracked with automation. The gap between top-quartile and median performers is driven by automation and pre-signature discipline, not raw effort.
+**The Hackett Group's procurement benchmarking research (Digital World Class®)** shows top-quartile firms managing 97%+ of spend under contract, versus roughly 70% for typical organisations — with contract compliance rate, amendment cycle time, and % obligations tracked with automation as recurring benchmark metrics. The gap between top-quartile and median performers is driven by automation and pre-signature discipline, not raw effort.
 
-**WorldCC (formerly IACCM)** research puts average value leakage from poor contract/commercial management at roughly **9% of contract value** — largely unmanaged obligations, unclaimed rebates/credits, and missed renegotiation windows. Their maturity model (ad hoc → managed → optimised) is a useful self-assessment reference.
+**WorldCC (formerly IACCM)** research puts average value leakage from poor contract/commercial management at roughly **9% of contract value** — a figure WorldCC has restated consistently since an original ~9.2% IACCM estimate — largely unmanaged obligations, unclaimed rebates/credits, and missed renegotiation windows. Their contracting-capability maturity assessment work is a useful self-assessment reference (specific stage-naming varies by source).
 `;
 
 const FRAMEWORK_QUICKADD = [
@@ -1693,6 +1693,7 @@ function renderScorecard(){
   const overall = SCORECARD_QUESTIONS.reduce((a,q)=>a+(STATE.scorecard[q.id]||3),0)/SCORECARD_QUESTIONS.length;
   return `
   <h2>Maturity Self-Assessment Scorecard</h2>
+  <p class="small muted">This assessment is original to CLM Suite. The dimensions it scores are informed by benchmarking themes published by CIPS, The Hackett Group, and WorldCC (formerly IACCM) — see the Framework tab's Best Practice Reference Points for the specific sources.</p>
   <div class="result-strip"><div><div class="eyebrow" style="color:#a39a89;">Overall maturity</div><div class="tname">${overall.toFixed(1)} / 5.0</div></div></div>
   ${body}
   <div class="row"><button class="btn outline" id="btnScExport">Export scorecard to Word</button></div>`;
