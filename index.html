@@ -1502,13 +1502,19 @@ let IMPORT_FILE_NAME = '';
 let SUGGESTED_TIER = null;
 let IMPORT_STATUS_MSG = '';
 let IMPORT_TRUNC_NOTE = '';
+let IMPORT_SKIPPED_LEN = 0;
+let KPI_SKIPPED_LEN = 0;
 function renderRegister(){
   const rows = STATE.register;
   if (STATE.activeContract && STATE.activeContract.text && IMPORT_RAW_TEXT !== STATE.activeContract.text) {
     IMPORT_RAW_TEXT = STATE.activeContract.text;
     IMPORT_FILE_NAME = STATE.activeContract.name;
-    IMPORT_STAGING = extractObligationCandidates(IMPORT_RAW_TEXT);
-    KPI_STAGING = extractKpiSlaCandidates(IMPORT_RAW_TEXT);
+    const obligationResult = extractObligationCandidates(IMPORT_RAW_TEXT);
+    const kpiResult = extractKpiSlaCandidates(IMPORT_RAW_TEXT);
+    IMPORT_STAGING = obligationResult.candidates;
+    KPI_STAGING = kpiResult.candidates;
+    IMPORT_SKIPPED_LEN = obligationResult.skippedForLength;
+    KPI_SKIPPED_LEN = kpiResult.skippedForLength;
     SUGGESTED_TIER = heuristicTierFromText(IMPORT_RAW_TEXT);
     IMPORT_STATUS_MSG = '';
     IMPORT_TRUNC_NOTE = STATE.activeContract.truncNote || '';
@@ -1517,10 +1523,15 @@ function renderRegister(){
     IMPORT_FILE_NAME = '';
     IMPORT_STAGING = [];
     KPI_STAGING = [];
+    IMPORT_SKIPPED_LEN = 0;
+    KPI_SKIPPED_LEN = 0;
     SUGGESTED_TIER = null;
     IMPORT_STATUS_MSG = '';
     IMPORT_TRUNC_NOTE = '';
   }
+  const skipNote = (IMPORT_SKIPPED_LEN || KPI_SKIPPED_LEN)
+    ? `${IMPORT_SKIPPED_LEN} obligation-style and ${KPI_SKIPPED_LEN} KPI/SLA-style clause(s) were skipped for length — review the source document directly for these.`
+    : '';
   return `
   <h2>Obligation / SLA / Change Order Register</h2>
   <div class="card">
@@ -1540,10 +1551,10 @@ function renderRegister(){
     <h3>Contract Analysis & Staging</h3>
     ${STATE.activeContract && STATE.activeContract.name ? `
       <p class="small muted">Active contract: <b>${esc(STATE.activeContract.name)}</b> (uploaded at Step 0). Check the candidate clauses below to stage them into the register.</p>
-      <div id="regImportStatusHost">${(IMPORT_STATUS_MSG || IMPORT_TRUNC_NOTE) ? collapsibleBanner('regImportStatus',
-        IMPORT_TRUNC_NOTE ? '⚠ Import notice' : 'Import notice',
-        `${IMPORT_STATUS_MSG?`<p style="margin:0 0 6px;">${IMPORT_STATUS_MSG}</p>`:''}${IMPORT_TRUNC_NOTE?`<p style="margin:0;color:var(--amber);">${esc(IMPORT_TRUNC_NOTE)}</p>`:''}`,
-        {amber: !!IMPORT_TRUNC_NOTE, defaultOpen:true}) : ''}</div>
+      <div id="regImportStatusHost">${(IMPORT_STATUS_MSG || IMPORT_TRUNC_NOTE || skipNote) ? collapsibleBanner('regImportStatus',
+        (IMPORT_TRUNC_NOTE || skipNote) ? '⚠ Import notice' : 'Import notice',
+        `${IMPORT_STATUS_MSG?`<p style="margin:0 0 6px;">${IMPORT_STATUS_MSG}</p>`:''}${IMPORT_TRUNC_NOTE?`<p style="margin:0 0 6px;color:var(--amber);">${esc(IMPORT_TRUNC_NOTE)}</p>`:''}${skipNote?`<p style="margin:0;color:var(--amber);">⚠ ${esc(skipNote)}</p>`:''}`,
+        {amber: !!(IMPORT_TRUNC_NOTE || skipNote), defaultOpen:true}) : ''}</div>
       <div id="regImportStatus" class="small muted"></div>
       ${SUGGESTED_TIER ? `
         <hr class="divider">
@@ -2242,8 +2253,12 @@ function wireRegister(){
         text = result.value || '';
       }
       IMPORT_RAW_TEXT = text;
-      IMPORT_STAGING = extractObligationCandidates(text);
-      KPI_STAGING = extractKpiSlaCandidates(text);
+      const obligationResult = extractObligationCandidates(text);
+      const kpiResult = extractKpiSlaCandidates(text);
+      IMPORT_STAGING = obligationResult.candidates;
+      KPI_STAGING = kpiResult.candidates;
+      IMPORT_SKIPPED_LEN = obligationResult.skippedForLength;
+      KPI_SKIPPED_LEN = kpiResult.skippedForLength;
       SUGGESTED_TIER = heuristicTierFromText(text);
       IMPORT_STATUS_MSG = (IMPORT_STAGING.length || KPI_STAGING.length) ? '' : 'No obligation or KPI/SLA-style clauses matched by keyword scan — try "Refine with AI" or add items manually.';
       IMPORT_TRUNC_NOTE = truncNote;
@@ -2252,6 +2267,8 @@ function wireRegister(){
     }catch(err){
       IMPORT_STATUS_MSG = '';
       IMPORT_TRUNC_NOTE = '';
+      IMPORT_SKIPPED_LEN = 0;
+      KPI_SKIPPED_LEN = 0;
       status.innerHTML = `<span style="color:var(--red);">${esc(err.message)}</span>`;
     }
   });
@@ -2313,12 +2330,14 @@ function wireRegister(){
 function extractKpiSlaCandidates(text){
   const sentences = text.split(/\n+|(?<=[.;])\s+/).map(s=>s.trim()).filter(Boolean);
   const kw = /(\d{1,3}(\.\d+)?\s?%|\d+\s?(hours?|business days?|minutes?)|uptime|response time|on-time|defect rate|service level|turnaround|resolution time)/i;
-  const seen = new Set(); const out = [];
+  const seen = new Set(); const out = []; let skippedForLength = 0;
   for(const s of sentences){
-    if(s.length<10 || s.length>250) continue;
-    if(kw.test(s) && !seen.has(s)){ seen.add(s); out.push(s); if(out.length>=25) break; }
+    if(s.length<10) continue;
+    if(!kw.test(s)) continue;
+    if(s.length>250){ skippedForLength++; continue; }
+    if(!seen.has(s)){ seen.add(s); out.push(s); if(out.length>=25) break; }
   }
-  return out;
+  return {candidates:out, skippedForLength};
 }
 function extractTargetNumber(text){
   const m = text.match(/\d{1,3}(\.\d+)?\s?%|\d+\s?(hours?|business days?|minutes?)/i);
@@ -2352,12 +2371,14 @@ async function aiSuggestTier(text){
 function extractObligationCandidates(text){
   const sentences = text.split(/\n+|(?<=[.;])\s+/).map(s=>s.trim()).filter(Boolean);
   const kw = /\b(shall|must|will (provide|deliver|notify|pay|maintain|ensure)|no later than|within \d+ (days|business days)|prior written notice|renewal|terminat(e|ion)|service level|penalt(y|ies)|liquidated damages)\b/i;
-  const seen = new Set(); const out = [];
+  const seen = new Set(); const out = []; let skippedForLength = 0;
   for(const s of sentences){
-    if(s.length<15 || s.length>300) continue;
-    if(kw.test(s) && !seen.has(s)){ seen.add(s); out.push(s); if(out.length>=40) break; }
+    if(s.length<15) continue;
+    if(!kw.test(s)) continue;
+    if(s.length>300){ skippedForLength++; continue; }
+    if(!seen.has(s)){ seen.add(s); out.push(s); if(out.length>=40) break; }
   }
-  return out;
+  return {candidates:out, skippedForLength};
 }
 async function aiExtractObligations(rawText){
   const prompt = `Extract distinct contractual obligations, deadlines, and SLA commitments from the following contract text as a plain newline-separated list, one obligation per line, no numbering, no commentary.\n\nText:\n${rawText.slice(0,6000)}`;
