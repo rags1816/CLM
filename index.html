@@ -1535,6 +1535,11 @@ function renderRegister(){
     IMPORT_STATUS_MSG = '';
     IMPORT_TRUNC_NOTE = '';
   }
+  // Prefer the cached chunked review's tier over the heuristic guess whenever one exists for
+  // this contract, so Register and Tiering never show/push two different numbers for the same
+  // document (Phase 2 Step 3 — the heuristic stays only as the fallback with no cache to read).
+  const cachedReviewForTier = (STATE.activeContract && STATE.activeContract.text) ? getCachedReview() : null;
+  const DISPLAY_TIER = cachedReviewForTier ? cachedReviewForTier.final.suggestedTier : SUGGESTED_TIER;
   const skipNote = (IMPORT_SKIPPED_LEN || KPI_SKIPPED_LEN)
     ? `${IMPORT_SKIPPED_LEN} obligation-style and ${KPI_SKIPPED_LEN} KPI/SLA-style clause(s) were skipped for length — review the source document directly for these.`
     : '';
@@ -1562,19 +1567,19 @@ function renderRegister(){
         `${IMPORT_STATUS_MSG?`<p style="margin:0 0 6px;">${IMPORT_STATUS_MSG}</p>`:''}${IMPORT_TRUNC_NOTE?`<p style="margin:0 0 6px;color:var(--amber);">${esc(IMPORT_TRUNC_NOTE)}</p>`:''}${skipNote?`<p style="margin:0;color:var(--amber);">⚠ ${esc(skipNote)}</p>`:''}`,
         {amber: !!(IMPORT_TRUNC_NOTE || skipNote), defaultOpen:true}) : ''}</div>
       <div id="regImportStatus" class="small muted"></div>
-      ${SUGGESTED_TIER ? `
+      ${DISPLAY_TIER ? `
         <hr class="divider">
         <div class="flex-between"><h4 style="margin:0;font-size:13.5px;">Suggested tiering for "${esc(IMPORT_FILE_NAME||'imported contract')}"</h4>
           <div class="row">
-            <button class="btn small outline" id="btnRefineTierAi">Refine with AI</button>
+            ${cachedReviewForTier ? '' : '<button class="btn small outline" id="btnRefineTierAi">Refine with AI</button>'}
             <button class="btn small gold" id="btnAddSuggestedTier">Add to portfolio tiering</button>
           </div>
         </div>
         <div class="row small mono" style="gap:16px;margin-top:6px;align-items:center;">
-          <span>Value ${SUGGESTED_TIER.value}</span><span>Risk ${SUGGESTED_TIER.risk}</span><span>Criticality ${SUGGESTED_TIER.criticality}</span><span>Impact ${SUGGESTED_TIER.impact}</span>
-          <span class="badge ${tierBadgeClass(getTier(weightedScore(SUGGESTED_TIER)).code)}">${tierDisplayName(getTier(weightedScore(SUGGESTED_TIER)).code)}</span>
+          <span>Value ${DISPLAY_TIER.value}</span><span>Risk ${DISPLAY_TIER.risk}</span><span>Criticality ${DISPLAY_TIER.criticality}</span><span>Impact ${DISPLAY_TIER.impact}</span>
+          <span class="badge ${tierBadgeClass(getTier(weightedScore(DISPLAY_TIER)).code)}">${tierDisplayName(getTier(weightedScore(DISPLAY_TIER)).code)}</span>
         </div>
-        <p class="small muted" style="margin-top:6px;">Heuristic by default (offline, keyword-based) — "Refine with AI" re-estimates using your connected provider.</p>
+        <p class="small muted" style="margin-top:6px;">${cachedReviewForTier ? 'Sourced from the full AI document review below — the same tier Tiering\'s auto-score and the portfolio table will use for this contract.' : 'Heuristic estimate (offline, keyword-based) — run the AI document review below for a fuller-text tier, or use "Refine with AI" for a quick single-call re-estimate.'}</p>
       ` : ''}
       ${IMPORT_STAGING.length ? `
         <div class="flex-between" style="margin-top:10px;">
@@ -1644,10 +1649,10 @@ function renderDocReviewPanel(){
     <p style="margin-bottom:4px;"><b>Rebate tiers:</b></p><ul>${liRebate(f.rebateTiers)}</ul>
     <p style="margin-bottom:4px;"><b>Risk flags:</b></p><ul>${li(f.riskFlags)}</ul>
     <div class="row">
-      <button class="btn small gold" id="btnApplyDocReviewTier">Apply suggested tier</button>
       <button class="btn small outline" id="btnApplyDocReviewObligations">Add obligations/SLAs to Register</button>
       <button class="btn small danger" id="btnClearDocReview">Discard review</button>
-    </div>`;
+    </div>
+    <p class="small muted" style="margin-top:6px;">This review's suggested tier is applied automatically above — no separate step needed.</p>`;
   }
   return html;
 }
@@ -2349,12 +2354,6 @@ function wireRegister(){
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
     render();
   });
-  const applyDocReviewTierBtn = document.getElementById('btnApplyDocReviewTier');
-  if(applyDocReviewTierBtn) applyDocReviewTierBtn.addEventListener('click',()=>{
-    const cached = getCachedReview();
-    if(cached) SUGGESTED_TIER = cached.final.suggestedTier;
-    render();
-  });
   const applyDocReviewObligationsBtn = document.getElementById('btnApplyDocReviewObligations');
   if(applyDocReviewObligationsBtn) applyDocReviewObligationsBtn.addEventListener('click',()=>{
     const cached = getCachedReview();
@@ -2367,7 +2366,9 @@ function wireRegister(){
   if(clearDocReviewBtn) clearDocReviewBtn.addEventListener('click',()=>{ clearCachedReview(); DOC_REVIEW_STATUS=''; render(); });
   const addTierBtn = document.getElementById('btnAddSuggestedTier');
   if(addTierBtn) addTierBtn.addEventListener('click',()=>{
-    STATE.tieringBulk.push({id:uid(), name: IMPORT_FILE_NAME||'Imported contract', ...SUGGESTED_TIER});
+    const cachedForAdd = (STATE.activeContract && STATE.activeContract.text) ? getCachedReview() : null;
+    const tierToAdd = cachedForAdd ? cachedForAdd.final.suggestedTier : SUGGESTED_TIER;
+    STATE.tieringBulk.push({id:uid(), name: IMPORT_FILE_NAME||'Imported contract', ...tierToAdd});
     saveState();
     addTierBtn.textContent = 'Added ✓'; addTierBtn.disabled = true;
   });
