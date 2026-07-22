@@ -85,6 +85,7 @@ naming convention, without changing the underlying scoring logic.
 
 ## Version history
 
-- **v2.3.0 [current]**: Document-centric workflow enabling contract uploads at Step 0, driving downstream AI/heuristic extraction (KPIs, SLAs, rebate tiers, obligations) across all tabs; persistent Framework screen inputs; detailed API connection error reporting with dropdown model selectors.
+- **v2.4.0 [current]**: Reliability & workflow-integrity pass — AI-call timeout/fallback handling, timezone-safe overdue calculation, full chunked map-reduce document review (replacing a 6,000-character truncation), stable contract identity with cached review reuse across tabs, verified CIPS/Hackett/WorldCC attribution wording, mobile hamburger nav, tiering-pathway consolidation, `getTier` data-integrity handling, and optional UNSPSC/CPV tagging. See `CHANGELOG.md` for the full breakdown.
+- **v2.3.0**: Document-centric workflow enabling contract uploads at Step 0, driving downstream AI/heuristic extraction (KPIs, SLAs, rebate tiers, obligations) across all tabs; persistent Framework screen inputs; detailed API connection error reporting with dropdown model selectors.
 - **v2.1.0**: Canvas-based charts rendering inside QBR and Governance screens; automated governance rollups including risks and recommendations from active tab metrics; register linking via supplier name columns.
 - **v1.5.0**: Initial release featuring the core 0-7 framework brief, Kraljic-style weighted scoring model, local browser state, and basic file upload staging.
