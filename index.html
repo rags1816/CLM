@@ -213,7 +213,7 @@ function tierBucketCounts(bulk){
 
 const GUIDE_TIPS = {
   about:['This is the front door — the pitch, the framework at a glance, and where to start.','Head to Settings first if you want AI drafting (Claude/Gemini) rather than Sandbox mode.','See the "offline vs. internet" card below for what needs a connection.'],
-  tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs.','The bulk table also has optional UNSPSC/CPV code fields — manual entry only, no lookup or validation.'],
+  tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs.','The bulk table also has optional UNSPSC/CPV code fields — manual entry only, no lookup or validation.','Uploading a confidential contract? Check the badge above the upload box: Sandbox keeps it fully local (offline heuristics); Claude/Gemini sends it out for a higher-fidelity AI read. Switch modes in ⚙ Settings first if you need to.'],
   framework:['The full 0–7 framework brief, plus benchmarking references (CIPS, Hackett, WorldCC).','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.','If a contract is active (uploaded on Tiering), the summary is grounded in a full-document AI review of it, not just your org profile fields — long documents offer a quick vs. full review choice with a cost estimate first.'],
   qbr:['Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.','If a contract is active, "AI Extract KPIs/SLAs" pulls them straight from it — offers the same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract KPIs/SLAs" would use.'],
   rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.','If a contract is active, "AI Extract Rebates" pulls rebate tiers straight from it — same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract Rebates" would use.'],
@@ -221,7 +221,7 @@ const GUIDE_TIPS = {
   coverage:['Three logs in one place: category spend coverage, stakeholder feedback, and supplier collaboration opportunities.','% spend under contract here feeds the Governance rollup — keep it current, it\'s the headline leakage indicator.'],
   scorecard:['Score your organisation 1–5 across each dimension. This feeds the Governance rollup.','Re-run quarterly to track maturity trend.','This maturity assessment is CLM Suite\'s own model — 15 questions across 6 dimensions. It\'s informed by, but not copied from, CIPS/Hackett/WorldCC research; see the Framework tab for the specific benchmarks.'],
   governance:['This is the CPO-facing rollup: spend coverage, tier mix, overdue obligations, maturity gaps — the value-leak view.','Everything here is computed live from the other tabs.','PowerPoint deck export needs internet to load the library once per session.'],
-  settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/Register/Rebates/QBR) uses Gemini directly when Primary mode is Claude or Gemini, regardless of which of those two is selected — that keeps its cost estimate accurate. In Sandbox mode it stays fully local instead — no Gemini call is made even if a Gemini key is stored.']
+  settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/Register/Rebates/QBR) uses Gemini directly when Primary mode is Claude or Gemini, regardless of which of those two is selected — that keeps its cost estimate accurate. In Sandbox mode it stays fully local instead — no Gemini call is made even if a Gemini key is stored.','Uploading on a non-Sandbox mode with a Gemini key set shows a one-time confirmation before the first upload each session, since that document\'s content will actually be sent to Gemini.']
 };
 
 const SCORECARD_QUESTIONS = [
@@ -942,6 +942,7 @@ function renderAbout(){
       <li><b>Capture at signature, not on discovery.</b> Obligations, KPIs and SLAs are defined in the contract, not reverse-engineered after a breach.</li>
       <li><b>One register, closed loop.</b> QBR actions feed obligations; obligations feed governance reporting.</li>
       <li><b>Your data stays local.</b> Everything lives in this browser's storage. AI calls (optional) go straight to your chosen provider using your own key.</li>
+      <li><b>Choose your mode per document.</b> Sandbox mode keeps a contract fully local using offline keyword heuristics — decent structural recall, no true language understanding. Claude/Gemini mode sends the content to that provider's API for real comprehension — better analysis, external transmission. Pick based on how confidential the specific document is.</li>
     </ul>
   </div>
   ${collapsibleBanner('aboutOfflineOnline', 'What works offline vs. what needs internet',
@@ -971,7 +972,7 @@ function renderAbout(){
         </ul>
       </div>
     </div>
-    <p class="small muted" style="margin-top:10px;">Full detail in ⚙ Settings.</p>`,
+    <p class="small muted" style="margin-top:10px;">Sandbox's offline heuristics are pattern-matching, not comprehension — good for a confidential first pass, not a substitute for the higher-fidelity read Claude/Gemini give you when you're comfortable sending the document externally. Full detail in ⚙ Settings.</p>`,
     {defaultOpen:true})}
   <div class="card">
     <h2>Roadmap</h2>
@@ -989,6 +990,11 @@ function renderAbout(){
 // genuinely honored for that specific upload, rather than leaving the user to just trust it.
 let SANDBOX_REASSURANCE_MSG = '';
 let SANDBOX_REASSURANCE_SHOWN = false;
+// Session-only: shown once per session, the first time a document is uploaded while a non-Sandbox
+// mode is active AND a Gemini key is actually stored (i.e. a real transmission is about to
+// happen -- document review always calls Gemini specifically, regardless of Primary provider).
+// Declining aborts that upload; a later upload attempt this session asks again.
+let EXTERNAL_MODE_CONFIRM_SHOWN = false;
 function renderTiering(){
   const s = STATE.tieringSingle;
   const score = weightedScore(s);
@@ -1006,7 +1012,9 @@ function renderTiering(){
   <div class="card">
     <h3 style="margin-top:0;">Upload & Analyze Contract</h3>
     <p class="muted small">Upload a contract (.docx or .pdf) to load it as the active contract context for AI extraction and scoring.</p>
-    ${STATE.ai.mode==='sandbox' ? `<p style="margin:0 0 8px;"><span class="badge ok" style="padding:6px 10px;">🔒 Sandbox mode: nothing leaves your browser</span> <span class="small muted">Document review runs entirely locally — safe for confidential contracts.</span></p>` : ''}
+    ${STATE.ai.mode==='sandbox'
+      ? `<p style="margin:0 0 8px;"><span class="badge ok" style="padding:6px 10px;">🔒 Sandbox mode: nothing leaves your browser</span> <span class="small muted">Document review runs entirely locally — safe for confidential contracts.</span></p>`
+      : `<p style="margin:0 0 8px;"><span class="badge due" style="padding:6px 10px;">⚠ Document review sends content to Gemini's API</span> <span class="small muted">This happens regardless of whether Claude or Gemini is your Primary provider (Settings). Switch to Sandbox first if this contract is confidential.</span></p>`}
     <div class="field" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <input type="file" id="tierUploadFile" accept=".docx,.pdf" style="max-width:320px;">
       <label style="display:inline-flex;align-items:center;font-weight:400;margin-bottom:0;cursor:pointer;"><input type="checkbox" id="chkAppendFile" style="width:auto;margin-right:4px;">Append to active contract</label>
@@ -2006,6 +2014,11 @@ function wireTiering(){
     fileInput.addEventListener('change', async (e)=>{
       const file = e.target.files[0];
       if(!file) return;
+      if(STATE.ai.mode!=='sandbox' && STATE.ai.geminiKey && !EXTERNAL_MODE_CONFIRM_SHOWN){
+        const proceed = confirm(`This document will be sent to Google's Gemini API for full-document analysis (this feature always uses Gemini directly, regardless of your Primary provider setting).\n\nIf this contract is confidential, click Cancel and switch to Sandbox mode in ⚙ Settings first.\n\nOK = continue and analyze with Gemini.\nCancel = abort this upload.`);
+        if(!proceed){ e.target.value=''; return; }
+        EXTERNAL_MODE_CONFIRM_SHOWN = true;
+      }
       const status = document.getElementById('tierUploadStatus');
       status.textContent = 'Reading document…';
       try{
@@ -2958,7 +2971,7 @@ document.getElementById('floaterBtn').addEventListener('click',()=>{
 const TOUR = [
   {screen:'about', text:'Welcome to CLM Suite. This tour loads a full demo — 3 suppliers across Gold/Silver/Bronze tiers with obligations, rebates, feedback, and a live QBR — so you can see everything working together, not just empty screens. Skip any time.'},
   {screen:'tiering', text:'Section 0: score Value, Risk, Criticality and Impact — the tier updates live. Three demo suppliers are loaded below, spread across all three tiers.'},
-  {screen:'tiering', text:'"Upload & Analyze Contract" above (not part of this demo\'s seed data) reads a real .docx/.pdf up to 350 pages, sets it as the active contract, and auto-scores it — that same active contract is then reused on QBR, Rebates and Register without re-uploading.'},
+  {screen:'tiering', text:'"Upload & Analyze Contract" above (not part of this demo\'s seed data) reads a real .docx/.pdf up to 350 pages, sets it as the active contract, and auto-scores it — that same active contract is then reused on QBR, Rebates and Register without re-uploading. The badge here shows which mode you\'re in: Sandbox keeps confidential contracts fully local (offline heuristics); Claude/Gemini sends content externally for higher-fidelity analysis — switch modes in ⚙ Settings based on how sensitive the document is.'},
   {screen:'tiering', text:'Scroll down: the bulk table auto-tiers every contract, and the heatmap plots them on Value × Risk. Try the naming-scheme dropdown to switch to 🥇🥈🥉 Gold/Silver/Bronze. Optional UNSPSC/CPV code fields on the right are manual entry only, no lookup.'},
   {screen:'framework', text:'The full 0–7 framework brief lives here with CIPS / Hackett / WorldCC benchmarks. Each section has a "+ Add starter" button that seeds real screens — try one.'},
   {screen:'register', text:'Obligations, SLAs and change orders for all three suppliers — some overdue on purpose. The "contract" column is what links a row back to a QBR.'},
@@ -2969,7 +2982,7 @@ const TOUR = [
   {screen:'coverage', text:'Category spend coverage (two categories are deliberately under 50% — white space), plus the stakeholder feedback and collaboration logs behind the QBR screen you just saw.'},
   {screen:'scorecard', text:'Maturity scored across 6 dimensions with a real (uneven) spread, not all 3s — feeds the radar chart on Governance next.'},
   {screen:'governance', text:'Everything lands here: tier mix donut, maturity radar, and Risks / To-do / Recommendations computed live from the disputed rebate, white-space categories, overdue items and low feedback you just saw. Export it to Word or PowerPoint with the charts embedded.'},
-  {screen:'settings', text:'Connect Claude or Gemini here for live AI drafting, or stay in Sandbox mode offline. That\u2019s the tour — explore freely, or reset all data in Settings to start clean.'}
+  {screen:'settings', text:'Connect Claude or Gemini here for live AI drafting and higher-fidelity document analysis, or stay in Sandbox mode to keep everything — including full document review — fully local, no network calls at all, verified end to end. Confidential contract? Use Sandbox. That\u2019s the tour — explore freely, or reset all data in Settings to start clean.'}
 ];
 let tourIndex = -1;
 let TOUR_POS = null;
