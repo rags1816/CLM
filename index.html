@@ -1607,7 +1607,8 @@ function renderDocReviewPanel(){
   const text = IMPORT_RAW_TEXT;
   const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
   const isLong = chunks.length>1;
-  let html = `<hr class="divider"><h3>AI document review (full text)</h3>`;
+  let html = `<hr class="divider"><h3>AI document review (full text)</h3>
+  <p class="small muted">This feature always uses Gemini directly, regardless of the provider set in ⚙ Settings — so the cost estimate below stays accurate. If no Gemini key is set, it falls back to the same offline keyword-based heuristic used elsewhere in the app.</p>`;
   if(DOC_REVIEW_STATUS) html += `<p class="small muted">${esc(DOC_REVIEW_STATUS)}</p>`;
   if(!DOC_REVIEW_RESULT){
     if(!isLong){
@@ -2605,14 +2606,14 @@ function parseFinalReviewJson(raw, fallbackText){
 async function reviewDocumentSingleCall(text, pageOffsets){
   const prompt = `Review this contract document and produce a structured summary. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\nOnly include a pageRange per item if reasonably inferable from context; otherwise use an empty string.\n\nDocument text:\n${text}`;
   let raw;
-  try{ raw = await askAI(prompt); }catch(e){ return heuristicFinalReview(text); }
+  try{ raw = await askGemini(prompt); }catch(e){ return heuristicFinalReview(text); }
   return parseFinalReviewJson(raw, text);
 }
 async function mapChunkForReview(chunk, index, total, pageOffsets){
   const range = pageRangeLabel(chunk.start, chunk.end, pageOffsets) || `part ${index+1} of ${total}`;
   const prompt = `You are reviewing PART ${index+1} of ${total} of a single contract document (approx. ${range}). Extract ONLY what is explicitly present in this excerpt. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...strings...],"obligations":[...strings...],"kpisSlas":[...strings...],"financialTerms":[...strings...],"riskFlags":[...strings...]}\nIf a category has nothing in this excerpt, return an empty array for it.\n\nExcerpt:\n${chunk.text}`;
   let raw;
-  try{ raw = await askAI(prompt); }catch(e){ return heuristicChunkSummary(chunk.text, range); }
+  try{ raw = await askGemini(prompt); }catch(e){ return heuristicChunkSummary(chunk.text, range); }
   try{
     const cleaned = raw.replace(/```json|```/g,'').trim();
     const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
@@ -2627,7 +2628,7 @@ async function reduceChunkSummaries(partials, fallbackFullText){
   const packed = partials.map(p=>`[${p.range}]\nParties: ${p.parties.join('; ')}\nObligations: ${p.obligations.join('; ')}\nKPIs/SLAs: ${p.kpisSlas.join('; ')}\nFinancial terms: ${p.financialTerms.join('; ')}\nRisk flags: ${p.riskFlags.join('; ')}`).join('\n\n');
   const prompt = `You are combining partial summaries of DIFFERENT SECTIONS of the SAME single contract document into one final structured review. Each section below is labeled with its approximate page range or part number. Deduplicate overlapping items across sections, but KEEP each item's page-range attribution. Return ONLY JSON, no commentary, no markdown fences, in this exact shape:\n{"parties":[...],"term":"...","financialMechanics":[{"item":"...","pageRange":"..."}],"obligationsSlas":[{"item":"...","pageRange":"..."}],"riskFlags":[{"item":"...","pageRange":"..."}],"suggestedTier":{"value":N,"risk":N,"criticality":N,"impact":N}}\n\nSection summaries:\n${packed}`;
   let raw;
-  try{ raw = await askAI(prompt); }catch(e){ return heuristicFinalReview(fallbackFullText); }
+  try{ raw = await askGemini(prompt); }catch(e){ return heuristicFinalReview(fallbackFullText); }
   return parseFinalReviewJson(raw, fallbackFullText);
 }
 // Orchestrator: <=1 chunk -> exactly one AI call (today's behavior, no chunk/cost UI needed).
