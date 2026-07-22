@@ -679,6 +679,19 @@ function formatNetworkError(err, mode) {
 }
 
 /* ---------- AI dispatch ---------- */
+const AI_TIMEOUT_MS = 30000;
+async function fetchWithTimeout(url, options){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), AI_TIMEOUT_MS);
+  try{
+    return await fetch(url, {...options, signal: controller.signal});
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('Request timed out after 30s');
+    throw e;
+  }finally{
+    clearTimeout(timer);
+  }
+}
 async function askAI(prompt){
   const mode = STATE.ai.mode;
   try{
@@ -706,7 +719,7 @@ async function askClaude(prompt){
   if(!STATE.ai.claudeKey) throw new Error('No Claude API key set in Settings.');
   const body = { model: STATE.ai.claudeModel, max_tokens:1000, messages:[{role:'user',content:prompt}] };
   if(STATE.ai.webSearch) body.tools = [{ type:'web_search_20250305', name:'web_search' }];
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method:'POST',
     headers:{
       'Content-Type':'application/json',
@@ -736,7 +749,7 @@ async function askGemini(prompt){
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${STATE.ai.geminiKey}`;
   const body = { contents:[{parts:[{text:prompt}]}] };
   if(STATE.ai.webSearch) body.tools = [{ google_search: {} }];
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method:'POST',
     headers:{
       'Content-Type':'application/json',
