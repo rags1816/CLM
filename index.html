@@ -65,6 +65,7 @@
   .badge.t1{background:var(--t1);} .badge.t2{background:var(--t2);} .badge.t3{background:var(--t3);} .badge.t4{background:var(--t4);}
   .badge.ok{background:var(--green);} .badge.due{background:var(--amber);} .badge.overdue{background:var(--red);}
   .badge.gold{background:#a8792e;} .badge.silver{background:#7c8591;} .badge.bronze{background:#8c5a3c;}
+  .badge.terr{background:var(--red);}
 
   .hero{padding:36px 0 20px;}
   .hero h1{font-size:36px;line-height:1.1;max-width:16ch;}
@@ -142,15 +143,15 @@
 
 /* ---------- constants ---------- */
 /* ---------- version (single source of truth — bump this, nothing else) ---------- */
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 
 const SCREENS = [
   {id:'about', label:'About'},
   {id:'tiering', label:'0 · Tiering'},
   {id:'framework', label:'Framework'},
-  {id:'qbr', label:'QBR'},
-  {id:'rebates', label:'Rebates'},
   {id:'register', label:'Obligations/SLA/CO'},
+  {id:'rebates', label:'Rebates'},
+  {id:'qbr', label:'QBR'},
   {id:'coverage', label:'Coverage & Feedback'},
   {id:'scorecard', label:'Maturity'},
   {id:'governance', label:'Governance'},
@@ -168,8 +169,17 @@ const TIERS = [
    workflow:['Compliance-only oversight, no active management cycle','System-generated renewal alert is the only required touchpoint','Reviewed only if flagged by spend anomaly or supplier issue','Candidate for consolidation or catalogue/PO buying instead']}
 ];
 
+// Returned by getTier when a score can't be matched to any real tier (NaN from a missing/
+// corrupted axis value, or a negative score from a corrupted one) -- NOT part of TIERS, so it's
+// never silently counted as Routine/Leverage in the portfolio table, heatmap, or governance mix.
+const TIER_ERROR = {min:null, name:'⚠ Data error', code:'terr',
+  workflow:['This contract\'s tiering score could not be calculated — one or more axis scores (Value/Risk/Criticality/Impact) is missing or invalid.','Do not treat this as Routine/Leverage — the real risk level is unknown until repaired.','Re-open Tiering and reset this contract\'s sliders (or re-enter the row) to repair it.']};
+
 function weightedScore(v){ return v.value*0.3 + v.risk*0.3 + v.criticality*0.2 + v.impact*0.2; }
-function getTier(score){ return TIERS.find(t=>score>=t.min) || TIERS[TIERS.length-1]; }
+function getTier(score){
+  const t = TIERS.find(t=>score>=t.min);
+  return t || TIER_ERROR; // never silently downgrade an unmatched (NaN/corrupted) score to the lowest tier
+}
 
 /* Naming scheme: 'standard' (Strategic/Managed/Transactional/Routine) or
    'gsb' (Gold/Silver/Bronze — the recognised public-procurement/GCF naming).
@@ -178,10 +188,12 @@ function getTier(score){ return TIERS.find(t=>score>=t.min) || TIERS[TIERS.lengt
 const GSB_LABELS = {t1:'🥇 Gold', t2:'🥈 Silver', t3:'🥉 Bronze', t4:'🥉 Bronze'};
 const GSB_CLASS = {t1:'gold', t2:'silver', t3:'bronze', t4:'bronze'};
 function tierDisplayName(code){
+  if(code==='terr') return TIER_ERROR.name;
   if(STATE.tierScheme==='gsb') return GSB_LABELS[code];
   return TIERS.find(t=>t.code===code).name;
 }
 function tierBadgeClass(code){
+  if(code==='terr') return 'terr';
   return STATE.tierScheme==='gsb' ? GSB_CLASS[code] : code;
 }
 function tierBucketCounts(bulk){
@@ -201,15 +213,15 @@ function tierBucketCounts(bulk){
 
 const GUIDE_TIPS = {
   about:['This is the front door — the pitch, the framework at a glance, and where to start.','Head to Settings first if you want AI drafting (Claude/Gemini) rather than Sandbox mode.','See the "offline vs. internet" card below for what needs a connection.'],
-  tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs.'],
+  tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs.','The bulk table also has optional UNSPSC/CPV code fields — manual entry only, no lookup or validation.'],
   framework:['The full 0–7 framework brief, plus benchmarking references (CIPS, Hackett, WorldCC).','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.','If a contract is active (uploaded on Tiering), the summary is grounded in a full-document AI review of it, not just your org profile fields — long documents offer a quick vs. full review choice with a cost estimate first.'],
-  qbr:['Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.','If a contract is active, "AI Extract KPIs/SLAs" pulls them straight from it — offers the same quick vs. full review choice as elsewhere for long documents.'],
-  rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.','If a contract is active, "AI Extract Rebates" pulls rebate tiers straight from it — same quick vs. full review choice as elsewhere for long documents.'],
-  register:['One register for obligations, SLAs, and change orders — filter by type. Status auto-flags overdue items by due date.','Upload the contract once on the 0 · Tiering tab (Step 0) — this tab reflects it automatically under "Contract Analysis & Staging," with candidate obligation/SLA clauses staged for your review.','The "AI document review" panel below runs a full structured review of the active contract — long documents (over ~6,000 characters) show a chunk-count and cost estimate first, with a choice between a full chunked review (covers the whole document) or a quick first-section-only pass.'],
+  qbr:['Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.','If a contract is active, "AI Extract KPIs/SLAs" pulls them straight from it — offers the same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract KPIs/SLAs" would use.'],
+  rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.','If a contract is active, "AI Extract Rebates" pulls rebate tiers straight from it — same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract Rebates" would use.'],
+  register:['One register for obligations, SLAs, and change orders — filter by type. Status auto-flags overdue items by due date.','Upload the contract once on the 0 · Tiering tab (Step 0) — this tab reflects it automatically under "Contract Analysis & Staging," with candidate obligation/SLA clauses staged for your review.','The "AI document review" panel below runs a full structured review of the active contract — long documents (over ~6,000 characters) show a chunk-count and cost estimate first, with a choice between a full chunked review (covers the whole document) or a quick first-section-only pass.','Its suggested tier is sourced from the same cached AI document review Tiering uses — no separate, possibly-disagreeing estimate.'],
   coverage:['Three logs in one place: category spend coverage, stakeholder feedback, and supplier collaboration opportunities.','% spend under contract here feeds the Governance rollup — keep it current, it\'s the headline leakage indicator.'],
   scorecard:['Score your organisation 1–5 across each dimension. This feeds the Governance rollup.','Re-run quarterly to track maturity trend.','This maturity assessment is CLM Suite\'s own model — 15 questions across 6 dimensions. It\'s informed by, but not copied from, CIPS/Hackett/WorldCC research; see the Framework tab for the specific benchmarks.'],
   governance:['This is the CPO-facing rollup: spend coverage, tier mix, overdue obligations, maturity gaps — the value-leak view.','Everything here is computed live from the other tabs.','PowerPoint deck export needs internet to load the library once per session.'],
-  settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/QBR/Rebates/Register) always uses Gemini directly for these calls, regardless of the provider selected here — that keeps its cost estimate accurate. It still falls back to the offline heuristic if no Gemini key is set.']
+  settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/Register/Rebates/QBR) always uses Gemini directly for these calls, regardless of the provider selected here — that keeps its cost estimate accurate. It still falls back to the offline heuristic if no Gemini key is set.']
 };
 
 const SCORECARD_QUESTIONS = [
@@ -760,7 +772,8 @@ async function askClaude(prompt){
   }
   const data = await res.json();
   const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text);
-  return textBlocks.length ? textBlocks.join('\n') : '(no text returned)';
+  if(!textBlocks.length) throw new Error('Claude responded successfully but returned no usable text (possibly blocked by a safety filter, hit the token limit before producing text, or used an unsupported response type). Try again, rephrase, or switch provider in Settings.');
+  return textBlocks.join('\n');
 }
 async function askGemini(prompt){
   if(!STATE.ai.geminiKey) throw new Error('No Gemini API key set in Settings.');
@@ -789,7 +802,8 @@ async function askGemini(prompt){
   const data = await res.json();
   const parts = data.candidates?.[0]?.content?.parts || [];
   const text = parts.filter(p=>p.text).map(p=>p.text).join('\n');
-  return text || '(no text returned)';
+  if(!text) throw new Error('Gemini responded successfully but returned no usable text (possibly blocked by a safety filter, hit the token limit before producing text, or used an unsupported response type). Try again, rephrase, or switch provider in Settings.');
+  return text;
 }
 function sandboxAnswer(prompt){
   // Offline, template-based draft — no network. Labelled honestly as Sandbox output.
@@ -963,8 +977,8 @@ function renderAbout(){
     <p class="small">This is v${APP_VERSION}. Deeper clause-level AI extraction and OCR for scanned PDFs are next.</p>
   </div>
   <div class="card">
-    <h2>What's new in v2.1</h2>
-    <p class="small">Charts throughout the app and in Word/PowerPoint exports; a fully rebuilt QBR and Governance report with recommendations, risks, and to-do lists generated from live data (not just tables); register items and rebate tiers now link to a QBR by contract/supplier name.</p>
+    <h2>What's new</h2>
+    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.4.0, a reliability & workflow-integrity pass covering AI-call resilience, cached document review reuse, tiering-pathway consolidation, and optional UNSPSC/CPV tagging.</p>
   </div>`;
 }
 
@@ -1034,9 +1048,9 @@ function renderTiering(){
     <div class="field"><label>Or paste contract/supplier names (one per line) to auto-score</label><textarea id="bulkPasteList" placeholder="Global Logistics Co&#10;Office Supplies Ltd&#10;Cloud Hosting Provider"></textarea></div>
     <button class="btn gold small" id="btnBulkAiScore">AI score & add to table</button>
     <div id="bulkAiStatus" class="small muted" style="margin-top:6px;"></div>
-    <table style="margin-top:12px;"><thead><tr><th>Contract</th><th>Value</th><th>Risk</th><th>Criticality</th><th>Impact</th><th>Score</th><th>Tier</th><th></th></tr></thead>
+    <table style="margin-top:12px;"><thead><tr><th>Contract</th><th>Value</th><th>Risk</th><th>Criticality</th><th>Impact</th><th>Score</th><th>Tier</th><th title="Optional classification codes — manual entry only, no lookup or validation.">UNSPSC / CPV</th><th></th></tr></thead>
     <tbody id="bulkTbody">
-      ${STATE.tieringBulk.map(row=>renderBulkRow(row)).join('') || '<tr><td colspan="8" class="small muted">No contracts added yet.</td></tr>'}
+      ${STATE.tieringBulk.map(row=>renderBulkRow(row)).join('') || '<tr><td colspan="9" class="small muted">No contracts added yet.</td></tr>'}
     </tbody></table>
     <div class="row" style="margin-top:10px;">
       <button class="btn outline small" id="btnExportBulkCSV">Export CSV</button>
@@ -1055,8 +1069,8 @@ function renderHeatmapSVG(bulk){
     const size = 6 + (r.criticality-1)*2.2;
     return {x,y,size,tier,name:r.name,score};
   });
-  const colorOf = {t1:'#7a2e2e',t2:'#a8792e',t3:'#3a6b5c',t4:'#6b7280'};
-  const gsbColorOf = {t1:'#a8792e',t2:'#7c8591',t3:'#8c5a3c',t4:'#8c5a3c'};
+  const colorOf = {t1:'#7a2e2e',t2:'#a8792e',t3:'#3a6b5c',t4:'#6b7280',terr:'#c0392b'};
+  const gsbColorOf = {t1:'#a8792e',t2:'#7c8591',t3:'#8c5a3c',t4:'#8c5a3c',terr:'#c0392b'};
   const useColor = STATE.tierScheme==='gsb' ? gsbColorOf : colorOf;
   const dots = pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.size.toFixed(1)}" fill="${useColor[p.tier.code]}" fill-opacity="0.85" stroke="#ffffff" stroke-width="1.5"><title>${esc(p.name)} — score ${p.score.toFixed(1)} (${esc(tierDisplayName(p.tier.code))})</title></circle>`).join('');
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:#fff;border:1px solid var(--line);">
@@ -1071,6 +1085,9 @@ function renderHeatmapSVG(bulk){
     ${dots}
   </svg>`;
 }
+// unspscCode/cpvCode (below): optional, manual-entry only, no lookup/validation -- matches the
+// pattern in CategoryAI. If a "duplicate contract" action is ever added to this table, these two
+// fields must be excluded from what it copies, same as CategoryAI's duplicate-as-child does.
 function renderBulkRow(row){
   const score = weightedScore(row);
   const tier = getTier(score);
@@ -1082,6 +1099,10 @@ function renderBulkRow(row){
     <td><input type="number" min="1" max="5" data-f="impact" value="${row.impact}" style="width:52px;"></td>
     <td class="mono">${score.toFixed(1)}</td>
     <td><span class="badge ${tierBadgeClass(tier.code)}">${tierDisplayName(tier.code)}</span></td>
+    <td>
+      <input type="text" data-f="unspscCode" value="${esc(row.unspscCode||'')}" placeholder="UNSPSC" style="width:90px;display:block;">
+      <input type="text" data-f="cpvCode" value="${esc(row.cpvCode||'')}" placeholder="CPV" style="width:90px;display:block;margin-top:2px;">
+    </td>
     <td><button class="btn danger small" data-del="${row.id}">✕</button></td>
   </tr>`;
 }
@@ -1187,6 +1208,7 @@ function renderQBR(){
   const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>QBR Template</h2>
+  <p style="margin:-6px 0 12px;">${active ? `<span class="badge ok" style="padding: 6px 10px;">📄 Active: ${esc(STATE.activeContract.name)}</span>` : '<span class="small muted">No active contract loaded — upload one on the 0 · Tiering tab to enable AI Extract.</span>'}</p>
   ${collapsibleBanner('qbrTools', '📄 Reports & AI tools', `<div class="row" style="align-items:center;">
       <button class="btn gold" id="btnQbrDraft">AI draft QBR narrative</button>
       <button class="btn outline" id="btnQbrExport">Export QBR to Word</button>
@@ -1405,6 +1427,7 @@ function renderRebates(){
   const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>Rebate Monitoring</h2>
+  <p style="margin:-6px 0 6px;">${active ? `<span class="badge ok" style="padding: 6px 10px;">📄 Active: ${esc(STATE.activeContract.name)}</span>` : '<span class="small muted">No active contract loaded — upload one on the 0 · Tiering tab to enable AI Extract.</span>'}</p>
   <p class="muted">Track tier thresholds against actual spend — accrued entitlement is calculated live from what you earn, not typed in separately.</p>
   ${rows.length ? `<div class="card"><h3>Accrued entitlement by tier</h3><div id="chartRebateBar" style="min-height:${Math.max(rows.length*30,120)}px;"></div></div>` : ''}
   <div class="card">
@@ -1535,6 +1558,11 @@ function renderRegister(){
     IMPORT_STATUS_MSG = '';
     IMPORT_TRUNC_NOTE = '';
   }
+  // Prefer the cached chunked review's tier over the heuristic guess whenever one exists for
+  // this contract, so Register and Tiering never show/push two different numbers for the same
+  // document (Phase 2 Step 3 — the heuristic stays only as the fallback with no cache to read).
+  const cachedReviewForTier = (STATE.activeContract && STATE.activeContract.text) ? getCachedReview() : null;
+  const DISPLAY_TIER = cachedReviewForTier ? cachedReviewForTier.final.suggestedTier : SUGGESTED_TIER;
   const skipNote = (IMPORT_SKIPPED_LEN || KPI_SKIPPED_LEN)
     ? `${IMPORT_SKIPPED_LEN} obligation-style and ${KPI_SKIPPED_LEN} KPI/SLA-style clause(s) were skipped for length — review the source document directly for these.`
     : '';
@@ -1562,19 +1590,19 @@ function renderRegister(){
         `${IMPORT_STATUS_MSG?`<p style="margin:0 0 6px;">${IMPORT_STATUS_MSG}</p>`:''}${IMPORT_TRUNC_NOTE?`<p style="margin:0 0 6px;color:var(--amber);">${esc(IMPORT_TRUNC_NOTE)}</p>`:''}${skipNote?`<p style="margin:0;color:var(--amber);">⚠ ${esc(skipNote)}</p>`:''}`,
         {amber: !!(IMPORT_TRUNC_NOTE || skipNote), defaultOpen:true}) : ''}</div>
       <div id="regImportStatus" class="small muted"></div>
-      ${SUGGESTED_TIER ? `
+      ${DISPLAY_TIER ? `
         <hr class="divider">
         <div class="flex-between"><h4 style="margin:0;font-size:13.5px;">Suggested tiering for "${esc(IMPORT_FILE_NAME||'imported contract')}"</h4>
           <div class="row">
-            <button class="btn small outline" id="btnRefineTierAi">Refine with AI</button>
+            ${cachedReviewForTier ? '' : '<button class="btn small outline" id="btnRefineTierAi">Refine with AI</button>'}
             <button class="btn small gold" id="btnAddSuggestedTier">Add to portfolio tiering</button>
           </div>
         </div>
         <div class="row small mono" style="gap:16px;margin-top:6px;align-items:center;">
-          <span>Value ${SUGGESTED_TIER.value}</span><span>Risk ${SUGGESTED_TIER.risk}</span><span>Criticality ${SUGGESTED_TIER.criticality}</span><span>Impact ${SUGGESTED_TIER.impact}</span>
-          <span class="badge ${tierBadgeClass(getTier(weightedScore(SUGGESTED_TIER)).code)}">${tierDisplayName(getTier(weightedScore(SUGGESTED_TIER)).code)}</span>
+          <span>Value ${DISPLAY_TIER.value}</span><span>Risk ${DISPLAY_TIER.risk}</span><span>Criticality ${DISPLAY_TIER.criticality}</span><span>Impact ${DISPLAY_TIER.impact}</span>
+          <span class="badge ${tierBadgeClass(getTier(weightedScore(DISPLAY_TIER)).code)}">${tierDisplayName(getTier(weightedScore(DISPLAY_TIER)).code)}</span>
         </div>
-        <p class="small muted" style="margin-top:6px;">Heuristic by default (offline, keyword-based) — "Refine with AI" re-estimates using your connected provider.</p>
+        <p class="small muted" style="margin-top:6px;">${cachedReviewForTier ? 'Sourced from the full AI document review below — the same tier Tiering\'s auto-score and the portfolio table will use for this contract.' : 'Heuristic estimate (offline, keyword-based) — run the AI document review below for a fuller-text tier, or use "Refine with AI" for a quick single-call re-estimate.'}</p>
       ` : ''}
       ${IMPORT_STAGING.length ? `
         <div class="flex-between" style="margin-top:10px;">
@@ -1644,10 +1672,10 @@ function renderDocReviewPanel(){
     <p style="margin-bottom:4px;"><b>Rebate tiers:</b></p><ul>${liRebate(f.rebateTiers)}</ul>
     <p style="margin-bottom:4px;"><b>Risk flags:</b></p><ul>${li(f.riskFlags)}</ul>
     <div class="row">
-      <button class="btn small gold" id="btnApplyDocReviewTier">Apply suggested tier</button>
       <button class="btn small outline" id="btnApplyDocReviewObligations">Add obligations/SLAs to Register</button>
       <button class="btn small danger" id="btnClearDocReview">Discard review</button>
-    </div>`;
+    </div>
+    <p class="small muted" style="margin-top:6px;">This review's suggested tier is applied automatically above — no separate step needed.</p>`;
   }
   return html;
 }
@@ -1703,6 +1731,10 @@ function renderScorecard(){
 function computeGovernanceData(){
   const bulk = STATE.tieringBulk;
   const buckets = tierBucketCounts(bulk);
+  // Rows whose tier couldn't be calculated (NaN/corrupted axis scores) are excluded from the
+  // buckets above rather than silently counted as Routine/Leverage -- surface that exclusion
+  // here instead of letting them just vanish from the mix with no visible trace.
+  const tierDataErrors = bulk.filter(r=>getTier(weightedScore(r)).code==='terr').length;
   const reg = STATE.register;
   const overdue = reg.filter(r=>{
     if(r.status==='Complete'||!r.dueDate) return false;
@@ -1722,10 +1754,11 @@ function computeGovernanceData(){
   const overallCoveragePct = totalSpend ? (weightedCovered/totalSpend*100) : 0;
   const whiteSpace = cats.filter(r=>(Number(r.pctContract)||0)<50);
   const lowFeedback = STATE.coverage.feedback.filter(f=>(Number(f.rating)||0)<=2);
-  return {bulk,buckets,reg,overdue,dimAvg,weakest,rebates,totalAccrued,unreconciled,disputed,cats,totalSpend,overallCoveragePct,whiteSpace,lowFeedback};
+  return {bulk,buckets,tierDataErrors,reg,overdue,dimAvg,weakest,rebates,totalAccrued,unreconciled,disputed,cats,totalSpend,overallCoveragePct,whiteSpace,lowFeedback};
 }
 function buildGovernanceInsights(d){
   const risks = [];
+  if(d.tierDataErrors) risks.push(`${d.tierDataErrors} contract(s) in the Tiering bulk table have invalid/missing axis scores — their tier could not be calculated, so they're excluded from the mix above (NOT counted as Routine/Leverage). Repair on the Tiering tab.`);
   if(d.overdue.length) risks.push(`${d.overdue.length} obligation/SLA/change-order item(s) overdue — contractual exposure until closed.`);
   if(d.disputed.length) risks.push(`${d.disputed.length} rebate tier(s) marked Disputed — potential revenue leakage unresolved.`);
   if(d.whiteSpace.length) risks.push(`${d.whiteSpace.length} spend categor${d.whiteSpace.length===1?'y':'ies'} under 50% contract coverage — maverick spend / uncontrolled risk.`);
@@ -1876,9 +1909,9 @@ function renderSettings(){
     <ul style="font-size:12.5px;line-height:1.7;color:#2a2f36;">
       <li><b>Real .docx export</b> (Framework/QBR/Register/Scorecard/Governance) — loads a small library once per browser session. <span class="muted">If blocked: automatically falls back to an HTML-based .doc file that still opens in Word.</span></li>
       <li><b>.pptx export</b> (QBR, Governance deck) — loads a library once per session. <span class="muted">If blocked: export fails with a clear message — no offline fallback for PowerPoint.</span></li>
-      <li><b>Word/PDF contract upload</b> (0 · Tiering → Upload & Analyze Contract, up to 350 pages) — loads a parser library once per session, then sets the active contract used across QBR/Rebates/Register. <span class="muted">If blocked: upload fails with a clear message; manual entry still works.</span></li>
+      <li><b>Word/PDF contract upload</b> (0 · Tiering → Upload & Analyze Contract, up to 350 pages) — loads a parser library once per session, then sets the active contract used across Register/Rebates/QBR. <span class="muted">If blocked: upload fails with a clear message; manual entry still works.</span></li>
       <li><b>Claude / Gemini AI drafting</b> — calls the provider's API directly on every request (not just once). <span class="muted">If blocked or no key: Sandbox mode (offline templates/heuristics) still works, and can be set as an automatic fallback above.</span></li>
-      <li><b>Full AI document review</b> (long documents, chunked — Tiering/QBR/Rebates/Register) — always calls Gemini directly for these requests, regardless of the provider selected above, so its cost estimate stays accurate. <span class="muted">If blocked or no Gemini key: falls back to the same offline heuristic extraction used elsewhere.</span></li>
+      <li><b>Full AI document review</b> (long documents, chunked — Tiering/Register/Rebates/QBR) — always calls Gemini directly for these requests, regardless of the provider selected above, so its cost estimate stays accurate. <span class="muted">If blocked or no Gemini key: falls back to the same offline heuristic extraction used elsewhere.</span></li>
     </ul>
   </div>
   <div class="card">
@@ -1915,7 +1948,7 @@ function wireTiering(){
     });
   });
   document.getElementById('btnAddBulkRow').addEventListener('click',()=>{
-    STATE.tieringBulk.push({id:uid(),name:'New contract',value:3,risk:3,criticality:3,impact:3});
+    STATE.tieringBulk.push({id:uid(),name:'New contract',value:3,risk:3,criticality:3,impact:3,unspscCode:'',cpvCode:''});
     saveState(); render();
   });
   document.getElementById('btnBulkAiScore').addEventListener('click', async ()=>{
@@ -1937,7 +1970,8 @@ function wireTiering(){
       inp.addEventListener('change', e=>{
         const row = STATE.tieringBulk.find(r=>r.id===id);
         const f = e.target.dataset.f;
-        row[f] = (f==='name') ? e.target.value : Math.max(1,Math.min(5, parseInt(e.target.value)||1));
+        const textFields = ['name','unspscCode','cpvCode']; // free text -- not 1-5 clamped scores
+        row[f] = textFields.includes(f) ? e.target.value : Math.max(1,Math.min(5, parseInt(e.target.value)||1));
         saveState(); render();
       });
     });
@@ -2349,12 +2383,6 @@ function wireRegister(){
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
     render();
   });
-  const applyDocReviewTierBtn = document.getElementById('btnApplyDocReviewTier');
-  if(applyDocReviewTierBtn) applyDocReviewTierBtn.addEventListener('click',()=>{
-    const cached = getCachedReview();
-    if(cached) SUGGESTED_TIER = cached.final.suggestedTier;
-    render();
-  });
   const applyDocReviewObligationsBtn = document.getElementById('btnApplyDocReviewObligations');
   if(applyDocReviewObligationsBtn) applyDocReviewObligationsBtn.addEventListener('click',()=>{
     const cached = getCachedReview();
@@ -2367,7 +2395,9 @@ function wireRegister(){
   if(clearDocReviewBtn) clearDocReviewBtn.addEventListener('click',()=>{ clearCachedReview(); DOC_REVIEW_STATUS=''; render(); });
   const addTierBtn = document.getElementById('btnAddSuggestedTier');
   if(addTierBtn) addTierBtn.addEventListener('click',()=>{
-    STATE.tieringBulk.push({id:uid(), name: IMPORT_FILE_NAME||'Imported contract', ...SUGGESTED_TIER});
+    const cachedForAdd = (STATE.activeContract && STATE.activeContract.text) ? getCachedReview() : null;
+    const tierToAdd = cachedForAdd ? cachedForAdd.final.suggestedTier : SUGGESTED_TIER;
+    STATE.tieringBulk.push({id:uid(), name: IMPORT_FILE_NAME||'Imported contract', ...tierToAdd});
     saveState();
     addTierBtn.textContent = 'Added ✓'; addTierBtn.disabled = true;
   });
@@ -2895,13 +2925,13 @@ const TOUR = [
   {screen:'about', text:'Welcome to CLM Suite. This tour loads a full demo — 3 suppliers across Gold/Silver/Bronze tiers with obligations, rebates, feedback, and a live QBR — so you can see everything working together, not just empty screens. Skip any time.'},
   {screen:'tiering', text:'Section 0: score Value, Risk, Criticality and Impact — the tier updates live. Three demo suppliers are loaded below, spread across all three tiers.'},
   {screen:'tiering', text:'"Upload & Analyze Contract" above (not part of this demo\'s seed data) reads a real .docx/.pdf up to 350 pages, sets it as the active contract, and auto-scores it — that same active contract is then reused on QBR, Rebates and Register without re-uploading.'},
-  {screen:'tiering', text:'Scroll down: the bulk table auto-tiers every contract, and the heatmap plots them on Value × Risk. Try the naming-scheme dropdown to switch to 🥇🥈🥉 Gold/Silver/Bronze.'},
+  {screen:'tiering', text:'Scroll down: the bulk table auto-tiers every contract, and the heatmap plots them on Value × Risk. Try the naming-scheme dropdown to switch to 🥇🥈🥉 Gold/Silver/Bronze. Optional UNSPSC/CPV code fields on the right are manual entry only, no lookup.'},
   {screen:'framework', text:'The full 0–7 framework brief lives here with CIPS / Hackett / WorldCC benchmarks. Each section has a "+ Add starter" button that seeds real screens — try one.'},
-  {screen:'qbr', text:'A live QBR for Global Logistics Co (our Strategic/Gold demo supplier) — KPIs, SLAs, and a breached SLA. Notice the Recommendations panel and the KPI/SLA status chart wrote themselves from that data.'},
-  {screen:'qbr', text:'Scroll down: stakeholder feedback for this supplier is pulled in automatically from the Coverage tab, matched by name — and it feeds the AI-drafted narrative too.'},
-  {screen:'rebates', text:'Rebate tiers for two of the three suppliers — accrued entitlement is calculated live from spend × rate, with a bar chart. Meridian Cloud Hosting is marked Disputed on purpose — watch what that does on Governance.'},
   {screen:'register', text:'Obligations, SLAs and change orders for all three suppliers — some overdue on purpose. The "contract" column is what links a row back to a QBR.'},
   {screen:'register', text:'If you uploaded a contract on Step 0, scroll down to "Contract Analysis & Staging" — candidate clauses staged for review, plus a full "AI document review" panel. Long documents show a chunk-count and cost estimate first, with a choice between a full chunked review (whole document) or a quick first-section-only pass.'},
+  {screen:'rebates', text:'Rebate tiers for two of the three suppliers — accrued entitlement is calculated live from spend × rate, with a bar chart. Meridian Cloud Hosting is marked Disputed on purpose — watch what that does on Governance.'},
+  {screen:'qbr', text:'A live QBR for Global Logistics Co (our Strategic/Gold demo supplier) — KPIs, SLAs, and a breached SLA. Notice the Recommendations panel and the KPI/SLA status chart wrote themselves from the obligations and rebates you just saw.'},
+  {screen:'qbr', text:'Scroll down: stakeholder feedback for this supplier is pulled in automatically from the Coverage tab, matched by name — and it feeds the AI-drafted narrative too.'},
   {screen:'coverage', text:'Category spend coverage (two categories are deliberately under 50% — white space), plus the stakeholder feedback and collaboration logs behind the QBR screen you just saw.'},
   {screen:'scorecard', text:'Maturity scored across 6 dimensions with a real (uneven) spread, not all 3s — feeds the radar chart on Governance next.'},
   {screen:'governance', text:'Everything lands here: tier mix donut, maturity radar, and Risks / To-do / Recommendations computed live from the disputed rebate, white-space categories, overdue items and low feedback you just saw. Export it to Word or PowerPoint with the charts embedded.'},

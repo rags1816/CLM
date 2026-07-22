@@ -16,7 +16,7 @@ into a CPO-facing governance view.
 
 ## Status
 
-v2.3.0. Active document-centric single-file app; known gaps documented in `ADMIN_GUIDE.md`.
+v2.4.0. Active document-centric single-file app; known gaps documented in `ADMIN_GUIDE.md`. See `CHANGELOG.md` for version history.
 
 ## Tech stack
 
@@ -26,6 +26,12 @@ Single `index.html` file — no server, backend, or build step. AI assistance vi
 
 Download and double-click `index.html` — opens in Chrome or Edge. No installation, no account, no login. See `USER_GUIDE.md` for screen-by-screen details.
 
+## Development note
+
+Development assisted by Claude Code (Anthropic) under my direction. The
+methodology, product design, and domain expertise reflected in this tool
+are my own — see `METHODOLOGY.md` for the original framework.
+
 ## Related
 
-See [`clm-METHODOLOGY.md`](./clm-METHODOLOGY.md) for details on the portfolio and maturity models.
+See [`METHODOLOGY.md`](./METHODOLOGY.md) for details on the portfolio and maturity models.
