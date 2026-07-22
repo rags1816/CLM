@@ -433,14 +433,14 @@ const DEFAULT_STATE = {
   tieringSingle:{value:3,risk:3,criticality:3,impact:3},
   tieringBulk:[],
   tierScheme:'standard',
-  qbr:{supplier:'',period:'',kpis:[],slas:[],rebates:'',risks:'',actions:'',narrative:'',recommendations:''},
+  qbr:{supplier:'',contractId:'',period:'',kpis:[],slas:[],rebates:'',risks:'',actions:'',narrative:'',recommendations:''},
   register:[],
   rebates:[],
   coverage:{categories:[], feedback:[], collaboration:[]},
   governanceSummary:'',
   scorecard:{},
   framework:{industry:'', spend:'', maturity:'Ad hoc', summaryText:''},
-  activeContract:{name:'', text:'', truncNote:'', pageOffsets:[]}
+  activeContract:{id:'', name:'', text:'', truncNote:'', pageOffsets:[]}
 };
 let STATE = loadState();
 
@@ -1114,7 +1114,14 @@ function normalizeSupplierName(s){
     .replace(/\b(inc|incorporated|ltd|limited|llc|corp|corporation|co|company|plc|gmbh)\b\.?/g,'')
     .replace(/\s+/g,' ').trim();
 }
-function matchByContractField(list, supplierName, field){
+// Matches by stable contract identity first (reliable, no name normalization needed), falling
+// back to the existing exact/fuzzy name matching for rows with no contractId (manually entered,
+// or predating this feature) or when no contractId is available to match against at all.
+function matchByContractField(list, supplierName, field, contractId, idField){
+  if(contractId && idField){
+    const byId = list.filter(r=> r[idField] && r[idField]===contractId);
+    if(byId.length) return {matches:byId, matchType:'id', variants:[]};
+  }
   const target = normalizeSupplierName(supplierName);
   if(!target) return {matches:[], matchType:'none', variants:[]};
   const exact = list.filter(r=> normalizeSupplierName(r[field]||'')===target);
@@ -1126,7 +1133,7 @@ function matchByContractField(list, supplierName, field){
   const variants = [...new Set(fuzzy.map(r=>r[field]))];
   return {matches:fuzzy, matchType: fuzzy.length?'fuzzy':'none', variants};
 }
-function getRegisterForSupplier(supplierName){ return matchByContractField(STATE.register, supplierName, 'contract'); }
+function getRegisterForSupplier(supplierName, contractId){ return matchByContractField(STATE.register, supplierName, 'contract', contractId, 'contractId'); }
 function getRebatesForSupplier(supplierName){ return matchByContractField(STATE.rebates, supplierName, 'contractName'); }
 function buildQbrRecommendations(q, matchedReg, matchedRebates, feedback){
   const recs = [];
@@ -1163,7 +1170,7 @@ function renderQBR(){
   const fb = getFeedbackForSupplier(q.supplier);
   const feedback = fb.matches;
   const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length) : null;
-  const regMatch = getRegisterForSupplier(q.supplier);
+  const regMatch = getRegisterForSupplier(q.supplier, q.contractId);
   const rebateMatch = getRebatesForSupplier(q.supplier);
   const recs = q.supplier ? buildQbrRecommendations(q, regMatch.matches, rebateMatch.matches, feedback) : [];
   const active = STATE.activeContract && STATE.activeContract.name;
@@ -1490,7 +1497,6 @@ let IMPORT_STATUS_MSG = '';
 let IMPORT_TRUNC_NOTE = '';
 let IMPORT_SKIPPED_LEN = 0;
 let KPI_SKIPPED_LEN = 0;
-let DOC_REVIEW_RESULT = null;
 let DOC_REVIEW_STATUS = '';
 let DOC_REVIEW_USE_SUMMARY = false;
 function renderRegister(){
@@ -1591,10 +1597,11 @@ function renderDocReviewPanel(){
   const text = STATE.activeContract.text;
   const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
   const isLong = chunks.length>1;
+  const cachedResult = getCachedReview();
   let html = `<hr class="divider"><h3>AI document review (full text)</h3>
   <p class="small muted">This feature always uses Gemini directly, regardless of the provider set in ⚙ Settings — so the cost estimate below stays accurate. If no Gemini key is set, it falls back to the same offline keyword-based heuristic used elsewhere in the app.</p>`;
   if(DOC_REVIEW_STATUS) html += `<p class="small muted">${esc(DOC_REVIEW_STATUS)}</p>`;
-  if(!DOC_REVIEW_RESULT){
+  if(!cachedResult){
     if(!isLong){
       html += `<p class="small muted">Document is ${text.length.toLocaleString()} characters — under the single-call threshold, so one AI call reviews it in full.</p>
       <button class="btn small gold" id="btnRunDocReview">Run AI document review</button>`;
@@ -1612,11 +1619,11 @@ function renderDocReviewPanel(){
       <button class="btn small gold" id="btnRunSummaryReview" style="margin-top:6px;">Review this summary</button></div>` : ''}`;
     }
   }else{
-    const f = DOC_REVIEW_RESULT.final;
+    const f = cachedResult.final;
     const li = arr => arr.length ? arr.map(x=>`<li>${esc(x.item)}${x.pageRange?` <span class="muted small">(${esc(x.pageRange)})</span>`:''}</li>`).join('') : '<li class="muted small">None found</li>';
     const liKpi = arr => arr.length ? arr.map(x=>`<li>${esc(x.name)}${x.target?` — target ${esc(x.target)}`:''}${x.pageRange?` <span class="muted small">(${esc(x.pageRange)})</span>`:''}</li>`).join('') : '<li class="muted small">None found</li>';
     const liRebate = arr => arr.length ? arr.map(x=>`<li>${esc(x.tierName)}${x.threshold?` — ${esc(x.threshold)}`:''}${x.ratePct?` (${x.ratePct}%)`:''}${x.pageRange?` <span class="muted small">(${esc(x.pageRange)})</span>`:''}</li>`).join('') : '<li class="muted small">None found</li>';
-    html += `<p class="small muted">Mode: ${DOC_REVIEW_RESULT.mode} — reviewed ${DOC_REVIEW_RESULT.chunksReviewed} of ${DOC_REVIEW_RESULT.chunkCount} chunk(s).</p>
+    html += `<p class="small muted">Mode: ${cachedResult.mode} — reviewed ${cachedResult.chunksReviewed} of ${cachedResult.chunkCount} chunk(s). <span class="muted">(cached — reused automatically by Rebates/QBR/Framework for this contract; "Discard review" below forces a fresh one everywhere.)</span></p>
     <p><b>Parties:</b> ${esc(f.parties.join('; ')||'—')}</p>
     <p><b>Term:</b> ${esc(f.term||'—')}</p>
     <p style="margin-bottom:4px;"><b>Financial mechanics:</b></p><ul>${li(f.financialMechanics)}</ul>
@@ -1986,13 +1993,16 @@ function wireTiering(){
           truncNote = (truncNote ? truncNote + ' ' : '') + 'Truncated to 1.2M chars for storage efficiency.';
         }
 
+        // A fresh id per upload (including appends, since the text content changes) means any
+        // cached review of the previous text is correctly treated as stale for the new content.
         STATE.activeContract = {
+          id: uid(),
           name: combinedName,
           text: combinedText,
           truncNote: truncNote,
           pageOffsets: combinedPageOffsets
         };
-        DOC_REVIEW_RESULT = null;
+        clearCachedReview();
         DOC_REVIEW_STATUS = '';
         DOC_REVIEW_USE_SUMMARY = false;
 
@@ -2000,6 +2010,7 @@ function wireTiering(){
         const { final } = await chooseAndRunDocumentReview();
         STATE.tieringSingle = final.suggestedTier;
         STATE.qbr.supplier = STATE.activeContract.name;
+        STATE.qbr.contractId = STATE.activeContract.id;
         saveState();
         render();
       }catch(err){
@@ -2010,8 +2021,8 @@ function wireTiering(){
   const clearBtn = document.getElementById('btnClearActiveContract');
   if(clearBtn) {
     clearBtn.addEventListener('click', ()=>{
-      STATE.activeContract = {name:'', text:'', truncNote:'', pageOffsets:[]};
-      DOC_REVIEW_RESULT = null;
+      STATE.activeContract = {id:'', name:'', text:'', truncNote:'', pageOffsets:[]};
+      clearCachedReview();
       DOC_REVIEW_STATUS = '';
       DOC_REVIEW_USE_SUMMARY = false;
       saveState();
@@ -2281,19 +2292,22 @@ function wireRegister(){
   if(runDocReviewBtn) runDocReviewBtn.addEventListener('click', async ()=>{
     DOC_REVIEW_STATUS = 'Reviewing document…'; render();
     try{
-      DOC_REVIEW_RESULT = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {});
+      await chooseAndRunDocumentReview(); // cache-aware: reuses an existing review of this contract if one exists
       DOC_REVIEW_STATUS = '';
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
     render();
   });
   const runFullReviewBtn = document.getElementById('btnRunFullReview');
   if(runFullReviewBtn) runFullReviewBtn.addEventListener('click', async ()=>{
+    // Explicit choice -> always runs fresh (bypasses the cache check), then updates the cache
+    // so Rebates/QBR/Framework pick up this fresh full result instead of re-running their own.
     const totalChunks = chunkTextForReview(STATE.activeContract.text, AI_REVIEW_CHUNK_SIZE).length;
     DOC_REVIEW_STATUS = `Reviewing chunk 1 of ${totalChunks}…`; render();
     try{
-      DOC_REVIEW_RESULT = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {
+      const result = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {
         onProgress:(done,total)=>{ DOC_REVIEW_STATUS = `Reviewing chunk ${done} of ${total}…`; render(); }
       });
+      setCachedReview(result);
       DOC_REVIEW_STATUS = '';
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
     render();
@@ -2302,7 +2316,8 @@ function wireRegister(){
   if(runQuickReviewBtn) runQuickReviewBtn.addEventListener('click', async ()=>{
     DOC_REVIEW_STATUS = 'Running quick review (first chunk only)…'; render();
     try{
-      DOC_REVIEW_RESULT = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {quickReview:true});
+      const result = await runDocumentReview(STATE.activeContract.text, STATE.activeContract.pageOffsets, {quickReview:true});
+      setCachedReview(result);
       DOC_REVIEW_STATUS = '';
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
     render();
@@ -2315,7 +2330,8 @@ function wireRegister(){
     if(!summaryText){ alert('Paste a summary first.'); return; }
     DOC_REVIEW_STATUS = 'Reviewing summary…'; render();
     try{
-      DOC_REVIEW_RESULT = await runDocumentReview(summaryText, [], {});
+      const result = await runDocumentReview(summaryText, [], {});
+      setCachedReview(result); // counts as "the review" for this contract -- other sites reuse it too
       DOC_REVIEW_STATUS = '';
       DOC_REVIEW_USE_SUMMARY = false;
     }catch(e){ DOC_REVIEW_STATUS=''; alert(e.message); }
@@ -2323,18 +2339,20 @@ function wireRegister(){
   });
   const applyDocReviewTierBtn = document.getElementById('btnApplyDocReviewTier');
   if(applyDocReviewTierBtn) applyDocReviewTierBtn.addEventListener('click',()=>{
-    SUGGESTED_TIER = DOC_REVIEW_RESULT.final.suggestedTier;
+    const cached = getCachedReview();
+    if(cached) SUGGESTED_TIER = cached.final.suggestedTier;
     render();
   });
   const applyDocReviewObligationsBtn = document.getElementById('btnApplyDocReviewObligations');
   if(applyDocReviewObligationsBtn) applyDocReviewObligationsBtn.addEventListener('click',()=>{
-    DOC_REVIEW_RESULT.final.obligationsSlas.forEach(x=>{
+    const cached = getCachedReview();
+    if(cached) cached.final.obligationsSlas.forEach(x=>{
       addCandidateToRegister(x.item + (x.pageRange ? ` (${x.pageRange})` : ''));
     });
     applyDocReviewObligationsBtn.textContent = 'Added ✓'; applyDocReviewObligationsBtn.disabled = true;
   });
   const clearDocReviewBtn = document.getElementById('btnClearDocReview');
-  if(clearDocReviewBtn) clearDocReviewBtn.addEventListener('click',()=>{ DOC_REVIEW_RESULT=null; DOC_REVIEW_STATUS=''; render(); });
+  if(clearDocReviewBtn) clearDocReviewBtn.addEventListener('click',()=>{ clearCachedReview(); DOC_REVIEW_STATUS=''; render(); });
   const addTierBtn = document.getElementById('btnAddSuggestedTier');
   if(addTierBtn) addTierBtn.addEventListener('click',()=>{
     STATE.tieringBulk.push({id:uid(), name: IMPORT_FILE_NAME||'Imported contract', ...SUGGESTED_TIER});
@@ -2609,12 +2627,32 @@ async function runDocumentReview(text, pageOffsets, opts={}){
   const final = await reduceChunkSummaries(partials, text);
   return {final, mode:'chunked', chunkCount:chunks.length, chunksReviewed:chunks.length};
 }
+// Caches the last full review result against the active contract's stable id, so the five
+// different features that can trigger a review of the same document (Tiering auto-score,
+// Register's panel, Rebates/QBR extractors, Framework's executive summary) reuse one result
+// instead of each re-chunking and re-calling the AI from scratch. Keyed on id specifically
+// (not text) so a same-named re-upload still counts as a new document. Session-only, like
+// DOC_REVIEW_STATUS -- not persisted to localStorage.
+let DOC_REVIEW_CACHE = null; // {contractId, result}
+function getCachedReview(){
+  if(DOC_REVIEW_CACHE && STATE.activeContract && STATE.activeContract.id && DOC_REVIEW_CACHE.contractId===STATE.activeContract.id) return DOC_REVIEW_CACHE.result;
+  return null;
+}
+function setCachedReview(result){
+  if(STATE.activeContract && STATE.activeContract.id) DOC_REVIEW_CACHE = {contractId:STATE.activeContract.id, result};
+}
+function clearCachedReview(){ DOC_REVIEW_CACHE = null; }
 // Shared entry point for any feature that wants to run a review of the active contract and
 // needs the same quick-review vs full-chunked-review choice the main "AI document review"
-// panel offers. For a short document there's nothing to choose (single call either way). For
-// a long document, asks once via confirm() and reuses the exact same runDocumentReview engine
-// (chunking, cost math, Gemini-forced calls, heuristic fallback) as the main panel.
+// panel offers. Reuses a cached result for the same contract id if one already exists --
+// only re-runs (and re-asks the quick/full question) for a document that hasn't been reviewed
+// yet, or after an explicit fresh run discards the cache. For a short document there's nothing
+// to choose (single call either way). For a long document, asks once via confirm() and reuses
+// the exact same runDocumentReview engine (chunking, cost math, Gemini-forced calls, heuristic
+// fallback) as the main panel.
 async function chooseAndRunDocumentReview(){
+  const cached = getCachedReview();
+  if(cached) return cached;
   const text = STATE.activeContract.text;
   const pageOffsets = STATE.activeContract.pageOffsets;
   const chunks = chunkTextForReview(text, AI_REVIEW_CHUNK_SIZE);
@@ -2624,11 +2662,17 @@ async function chooseAndRunDocumentReview(){
     const runFull = confirm(`This document will be reviewed in ${chunks.length} chunks to cover the full text (est. cost ~$${cost.costUSD.toFixed(3)}, ${STATE.ai.geminiModel} rates).\n\nOK = full review (covers the whole document).\nCancel = quick review (first section only, faster/cheaper, partial coverage).`);
     quickReview = !runFull;
   }
-  return runDocumentReview(text, pageOffsets, {quickReview});
+  const result = await runDocumentReview(text, pageOffsets, {quickReview});
+  setCachedReview(result);
+  return result;
 }
 
 function addCandidateToRegister(text){
-  STATE.register.push({id:uid(), type: /service level|sla\b/i.test(text)?'SLA':'Obligation', contract:'', description:text, owner:'', dueDate:'', recurrence:'One-off', status:'Open'});
+  // Auto-link to the active contract by stable id (falls back to its name for display/manual
+  // editing) so this item shows up under the matching QBR without the user retyping anything.
+  const contract = (STATE.activeContract && STATE.activeContract.name) || '';
+  const contractId = (STATE.activeContract && STATE.activeContract.id) || '';
+  STATE.register.push({id:uid(), type: /service level|sla\b/i.test(text)?'SLA':'Obligation', contract, contractId, description:text, owner:'', dueDate:'', recurrence:'One-off', status:'Open'});
   saveState();
 }
 
