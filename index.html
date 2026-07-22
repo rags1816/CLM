@@ -469,6 +469,16 @@ function saveState(){
 }
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* Days from today (local calendar day) to a 'YYYY-MM-DD' due date. Negative = overdue.
+   Parses/compares local calendar days only — no UTC-midnight-vs-local-now skew. */
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const due = new Date(y, m-1, d);
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  return Math.round((due-today)/86400000);
+}
 
 /* ---------- collapsible banners ---------- */
 let BANNER_STATE = {}; // session-only: id -> true(open)/false(collapsed)
@@ -1127,7 +1137,7 @@ function buildQbrRecommendations(q, matchedReg, matchedRebates, feedback){
   if(atRiskSla.length || atRiskKpi.length) recs.push(`Monitor ${atRiskSla.length+atRiskKpi.length} at-risk KPI/SLA metric(s) closely ahead of the next review.`);
   const disputedRebates = matchedRebates.filter(r=>r.status==='Disputed');
   if(disputedRebates.length) recs.push(`Resolve ${disputedRebates.length} disputed rebate tier(s) before the next reconciliation cycle.`);
-  const overdueItems = matchedReg.filter(r=> r.status!=='Complete' && r.dueDate && new Date(r.dueDate) < new Date());
+  const overdueItems = matchedReg.filter(r=> r.status!=='Complete' && r.dueDate && daysUntil(r.dueDate)<0);
   if(overdueItems.length) recs.push(`Close ${overdueItems.length} overdue obligation/SLA/change-order item(s) linked to this contract.`);
   const avgRating = feedback.length ? feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length : null;
   if(avgRating!==null && avgRating<3) recs.push('Stakeholder sentiment is below neutral — schedule a relationship review with key stakeholders.');
@@ -1579,9 +1589,7 @@ function renderRegister(){
 function statusBadge(row){
   if(row.status==='Complete') return `<span class="badge ok">Complete</span>`;
   if(!row.dueDate) return `<span class="badge t4">No date</span>`;
-  const due = new Date(row.dueDate);
-  const now = new Date();
-  const diffDays = Math.floor((due-now)/86400000);
+  const diffDays = daysUntil(row.dueDate);
   if(diffDays<0) return `<span class="badge overdue">Overdue</span>`;
   if(diffDays<=30) return `<span class="badge due">Due soon</span>`;
   return `<span class="badge ok">On track</span>`;
@@ -1632,7 +1640,7 @@ function computeGovernanceData(){
   const reg = STATE.register;
   const overdue = reg.filter(r=>{
     if(r.status==='Complete'||!r.dueDate) return false;
-    return new Date(r.dueDate) < new Date();
+    return daysUntil(r.dueDate)<0;
   });
   const dims = {};
   SCORECARD_QUESTIONS.forEach(q=>{ dims[q.dim]=dims[q.dim]||[]; dims[q.dim].push(STATE.scorecard[q.id]||3); });
