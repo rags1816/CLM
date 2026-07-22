@@ -65,6 +65,7 @@
   .badge.t1{background:var(--t1);} .badge.t2{background:var(--t2);} .badge.t3{background:var(--t3);} .badge.t4{background:var(--t4);}
   .badge.ok{background:var(--green);} .badge.due{background:var(--amber);} .badge.overdue{background:var(--red);}
   .badge.gold{background:#a8792e;} .badge.silver{background:#7c8591;} .badge.bronze{background:#8c5a3c;}
+  .badge.terr{background:var(--red);}
 
   .hero{padding:36px 0 20px;}
   .hero h1{font-size:36px;line-height:1.1;max-width:16ch;}
@@ -168,8 +169,17 @@ const TIERS = [
    workflow:['Compliance-only oversight, no active management cycle','System-generated renewal alert is the only required touchpoint','Reviewed only if flagged by spend anomaly or supplier issue','Candidate for consolidation or catalogue/PO buying instead']}
 ];
 
+// Returned by getTier when a score can't be matched to any real tier (NaN from a missing/
+// corrupted axis value, or a negative score from a corrupted one) -- NOT part of TIERS, so it's
+// never silently counted as Routine/Leverage in the portfolio table, heatmap, or governance mix.
+const TIER_ERROR = {min:null, name:'⚠ Data error', code:'terr',
+  workflow:['This contract\'s tiering score could not be calculated — one or more axis scores (Value/Risk/Criticality/Impact) is missing or invalid.','Do not treat this as Routine/Leverage — the real risk level is unknown until repaired.','Re-open Tiering and reset this contract\'s sliders (or re-enter the row) to repair it.']};
+
 function weightedScore(v){ return v.value*0.3 + v.risk*0.3 + v.criticality*0.2 + v.impact*0.2; }
-function getTier(score){ return TIERS.find(t=>score>=t.min) || TIERS[TIERS.length-1]; }
+function getTier(score){
+  const t = TIERS.find(t=>score>=t.min);
+  return t || TIER_ERROR; // never silently downgrade an unmatched (NaN/corrupted) score to the lowest tier
+}
 
 /* Naming scheme: 'standard' (Strategic/Managed/Transactional/Routine) or
    'gsb' (Gold/Silver/Bronze — the recognised public-procurement/GCF naming).
@@ -178,10 +188,12 @@ function getTier(score){ return TIERS.find(t=>score>=t.min) || TIERS[TIERS.lengt
 const GSB_LABELS = {t1:'🥇 Gold', t2:'🥈 Silver', t3:'🥉 Bronze', t4:'🥉 Bronze'};
 const GSB_CLASS = {t1:'gold', t2:'silver', t3:'bronze', t4:'bronze'};
 function tierDisplayName(code){
+  if(code==='terr') return TIER_ERROR.name;
   if(STATE.tierScheme==='gsb') return GSB_LABELS[code];
   return TIERS.find(t=>t.code===code).name;
 }
 function tierBadgeClass(code){
+  if(code==='terr') return 'terr';
   return STATE.tierScheme==='gsb' ? GSB_CLASS[code] : code;
 }
 function tierBucketCounts(bulk){
@@ -1055,8 +1067,8 @@ function renderHeatmapSVG(bulk){
     const size = 6 + (r.criticality-1)*2.2;
     return {x,y,size,tier,name:r.name,score};
   });
-  const colorOf = {t1:'#7a2e2e',t2:'#a8792e',t3:'#3a6b5c',t4:'#6b7280'};
-  const gsbColorOf = {t1:'#a8792e',t2:'#7c8591',t3:'#8c5a3c',t4:'#8c5a3c'};
+  const colorOf = {t1:'#7a2e2e',t2:'#a8792e',t3:'#3a6b5c',t4:'#6b7280',terr:'#c0392b'};
+  const gsbColorOf = {t1:'#a8792e',t2:'#7c8591',t3:'#8c5a3c',t4:'#8c5a3c',terr:'#c0392b'};
   const useColor = STATE.tierScheme==='gsb' ? gsbColorOf : colorOf;
   const dots = pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.size.toFixed(1)}" fill="${useColor[p.tier.code]}" fill-opacity="0.85" stroke="#ffffff" stroke-width="1.5"><title>${esc(p.name)} — score ${p.score.toFixed(1)} (${esc(tierDisplayName(p.tier.code))})</title></circle>`).join('');
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:#fff;border:1px solid var(--line);">
@@ -1710,6 +1722,10 @@ function renderScorecard(){
 function computeGovernanceData(){
   const bulk = STATE.tieringBulk;
   const buckets = tierBucketCounts(bulk);
+  // Rows whose tier couldn't be calculated (NaN/corrupted axis scores) are excluded from the
+  // buckets above rather than silently counted as Routine/Leverage -- surface that exclusion
+  // here instead of letting them just vanish from the mix with no visible trace.
+  const tierDataErrors = bulk.filter(r=>getTier(weightedScore(r)).code==='terr').length;
   const reg = STATE.register;
   const overdue = reg.filter(r=>{
     if(r.status==='Complete'||!r.dueDate) return false;
@@ -1729,10 +1745,11 @@ function computeGovernanceData(){
   const overallCoveragePct = totalSpend ? (weightedCovered/totalSpend*100) : 0;
   const whiteSpace = cats.filter(r=>(Number(r.pctContract)||0)<50);
   const lowFeedback = STATE.coverage.feedback.filter(f=>(Number(f.rating)||0)<=2);
-  return {bulk,buckets,reg,overdue,dimAvg,weakest,rebates,totalAccrued,unreconciled,disputed,cats,totalSpend,overallCoveragePct,whiteSpace,lowFeedback};
+  return {bulk,buckets,tierDataErrors,reg,overdue,dimAvg,weakest,rebates,totalAccrued,unreconciled,disputed,cats,totalSpend,overallCoveragePct,whiteSpace,lowFeedback};
 }
 function buildGovernanceInsights(d){
   const risks = [];
+  if(d.tierDataErrors) risks.push(`${d.tierDataErrors} contract(s) in the Tiering bulk table have invalid/missing axis scores — their tier could not be calculated, so they're excluded from the mix above (NOT counted as Routine/Leverage). Repair on the Tiering tab.`);
   if(d.overdue.length) risks.push(`${d.overdue.length} obligation/SLA/change-order item(s) overdue — contractual exposure until closed.`);
   if(d.disputed.length) risks.push(`${d.disputed.length} rebate tier(s) marked Disputed — potential revenue leakage unresolved.`);
   if(d.whiteSpace.length) risks.push(`${d.whiteSpace.length} spend categor${d.whiteSpace.length===1?'y':'ies'} under 50% contract coverage — maverick spend / uncontrolled risk.`);
