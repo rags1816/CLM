@@ -24,10 +24,18 @@
   #topbar{position:sticky;top:0;z-index:50;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:54px;}
   #topbar .brand{font-family:'Newsreader',serif;font-size:18px;letter-spacing:0.01em;display:flex;align-items:center;gap:8px;}
   #topbar .brand .tag{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a39a89;letter-spacing:0.1em;border:1px solid #3a3f47;padding:2px 6px;border-radius:2px;}
-  #nav{display:flex;gap:2px;flex-wrap:wrap;}
-  #nav button{background:none;border:none;color:#c9c2b4;font-size:12.5px;padding:8px 10px;border-radius:2px;letter-spacing:0.02em;}
-  #nav button:hover{background:#232830;color:#fff;}
-  #nav button.active{background:var(--gold);color:#1c1408;font-weight:600;}
+  #nav{display:flex;align-items:center;gap:8px;}
+  #navToggle{display:none;background:none;border:1px solid #3a3f47;color:#c9c2b4;font-size:16px;line-height:1;padding:6px 10px;border-radius:2px;cursor:pointer;}
+  #navList{display:flex;gap:2px;flex-wrap:wrap;}
+  #navList button{background:none;border:none;color:#c9c2b4;font-size:12.5px;padding:8px 10px;border-radius:2px;letter-spacing:0.02em;}
+  #navList button:hover{background:#232830;color:#fff;}
+  #navList button.active{background:var(--gold);color:#1c1408;font-weight:600;}
+  @media (max-width:768px){
+    #navToggle{display:block;}
+    #navList{display:none;flex-direction:column;position:absolute;top:54px;left:0;right:0;background:var(--ink);z-index:60;padding:8px 16px 16px;box-shadow:0 8px 20px rgba(0,0,0,0.3);}
+    #navList.open{display:flex;}
+    #navList button{padding:12px 10px;text-align:left;width:100%;}
+  }
 
   #app{max-width:960px;margin:0 auto;padding:24px 18px 100px;}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:20px;margin-bottom:16px;}
@@ -822,7 +830,7 @@ async function aiScoreBulkContracts(rawListText){
 }
 
 /* ---------- render root ---------- */
-function setScreen(id){ STATE.screen = id; saveState(); render(); renderFloaterTips(); }
+function setScreen(id){ STATE.screen = id; NAV_MENU_OPEN = false; saveState(); render(); renderFloaterTips(); }
 
 function render(){
   renderNav();
@@ -835,10 +843,13 @@ function render(){
   app.innerHTML = (map[STATE.screen]||renderAbout)();
   wireScreen(STATE.screen);
 }
+let NAV_MENU_OPEN = false;
 function renderNav(){
   const nav = document.getElementById('nav');
-  nav.innerHTML = SCREENS.map(s=>`<button data-nav="${s.id}" class="${STATE.screen===s.id?'active':''}">${esc(s.label)}</button>`).join('');
-  nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>setScreen(b.dataset.nav)));
+  const links = SCREENS.map(s=>`<button data-nav="${s.id}" class="${STATE.screen===s.id?'active':''}">${esc(s.label)}</button>`).join('');
+  nav.innerHTML = `<button id="navToggle" aria-label="Menu" aria-expanded="${NAV_MENU_OPEN}">☰</button><div id="navList" class="${NAV_MENU_OPEN?'open':''}">${links}</div>`;
+  document.getElementById('navToggle').addEventListener('click',()=>{ NAV_MENU_OPEN=!NAV_MENU_OPEN; renderNav(); });
+  nav.querySelectorAll('#navList button').forEach(b=>b.addEventListener('click',()=>setScreen(b.dataset.nav)));
 }
 function renderFloaterTips(){
   const panel = document.getElementById('floaterPanel');
