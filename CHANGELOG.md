@@ -1,25 +1,110 @@
 # Changelog
 
-v2.6.0
-What's in this pass:
-
-Multi-QBR — STATE.qbrs[] collection, picker UI (Open/Delete/+ New), backward-compatible migration from old single-QBR saves, demo data now seeds 2 QBRs, and Governance now aggregates breaches and "top-tier contract with no QBR at all" across every saved QBR, not just whichever one's open.
-Two-page Contract Brief — new screen, contract dropdown pulls tiering/register/rebates/feedback/QBR status together automatically, AI-drafted handover narrative, Word export.
-Renewal & Obligation Watch Agent — lives on Governance, scans every open register item across the whole portfolio (not just the tab you happen to be on), buckets into critical/urgent/upcoming, with an optional AI-prioritized action brief on top.
-
-Version bumped to 2.6.0, About/What's New, demo tour, and GUIDE_TIPS all updated to match.
-
-v2.5.0
-What's in this pass:
-
-About screen → chevron stepper. The 8 pillar cards are now a step-through: dots + ‹ Previous / Next › chevrons, one section at a time, starting at Section 0. Content unchanged, just no longer a long scroll.
-Contract Summary Intake (new screen). A guided, no-upload form: contract/supplier name, the same 4-axis tier sliders as Tiering, one-per-line Obligations/SLAs (with optional (YYYY-MM-DD) due-date parsing), and optional rebate terms. One submit pushes into tieringBulk, register, and rebates in a single pass, and sets it as the active contract (so QBR/Register/Rebates pick it up) — without ever touching document parsing or storing the actual contract text. Positioned explicitly on the About page ("No document to upload? Start here →") and in the demo tour, so it's a clear alternative path,
-
 All notable changes to CLM Suite are recorded here, most recent first. For
 version history prior to this file's creation, see the **Version history**
 section of `METHODOLOGY.md`.
 
-## v2.4.0 [current] — Reliability & workflow-integrity pass
+## v2.7.0 [current] — Multi-step AI intake agent & cross-contract pattern scan
+
+**Multi-step contract intake agent:**
+- Added a "0 · Describe it (AI-assisted)" step at the top of Contract
+  Summary Intake. Describe a contract in plain English and the AI returns
+  a structured suggestion (tier scores, contract identity, obligations,
+  SLAs, rebate terms) via a single call, which pre-fills the existing
+  intake fields directly for review.
+- Nothing is created or saved at this step — the person still reviews and
+  edits every field, then commits via the existing "Create contract
+  record" action. This chains contract description → AI-suggested
+  tiering/obligations/SLAs/rebate terms → one human review/approve step,
+  rather than five separate manual actions across screens.
+
+**Cross-Contract Pattern Scan:**
+- New card on Governance, below the Watch Agent. Builds a compact
+  per-contract summary (tier, overdue count, rebate dispute status,
+  average feedback rating, a sample of register/feedback text) across the
+  whole portfolio and sends it in a single AI call, looking for recurring
+  themes a single-contract view can't surface — e.g. the same issue type
+  overdue on multiple suppliers, a repeated complaint theme, clustered
+  rebate disputes.
+- Explicitly prompted to say "nothing recurs" rather than invent a
+  pattern when the data doesn't support one. Requires at least 2 contracts
+  with register/feedback data on file; the scan button stays disabled
+  otherwise.
+
+## v2.6.0 — Multi-QBR, Contract Brief, and the Renewal & Obligation Watch Agent
+
+**Multi-QBR:**
+- Replaced the single `STATE.qbr` object with a `STATE.qbrs[]` collection,
+  each keyed by id, holding its own KPIs, SLAs, narrative, and
+  recommendations — so multiple suppliers each keep their own QBR record
+  instead of one overwriting the last.
+- Added a QBR picker at the top of the QBR screen (Open / Delete / + New),
+  with a backward-compatible one-time migration that files any pre-v2.6
+  single QBR into the new collection on first load, rather than dropping
+  it.
+- Governance's risk/to-do lists now aggregate across **every** saved QBR
+  — flagging suppliers with a breached KPI/SLA on record, and Strategic/
+  Gold-tier contracts that have no QBR record at all — instead of only
+  seeing whichever QBR happened to be open.
+- Demo data now seeds two QBRs (Global Logistics Co, Meridian Cloud
+  Hosting) so the multi-QBR picker has something to demonstrate out of
+  the box.
+
+**Two-page Contract Brief (new screen):**
+- A per-contract handover document distinct from the QBR (a periodic
+  performance review) and the Framework brief (the whole methodology) —
+  this is the summary a procurement manager hands to the contract manager
+  taking over day-to-day ownership.
+- Select a contract from a dropdown and it auto-assembles: tier and
+  weighted score, the four axis scores, next key date from the Register,
+  rebate standing, existing QBR status, average stakeholder rating, top
+  risks, open register items, recent feedback, and recommended next
+  actions for the incoming owner — all pulled live from Tiering, Register,
+  Rebates, Coverage, and QBR data already on file.
+- "Draft handover narrative" writes a short AI paragraph grounded in what's
+  actually on file (offline-safe recommendations list underneath either
+  way); exports to Word.
+
+**Renewal & Obligation Watch Agent:**
+- New card on Governance. Scans every open Register item across the
+  **whole portfolio** — not just whichever contract's tab happens to be
+  open — and buckets anything overdue or due soon into critical
+  (overdue) / urgent (≤30 days) / upcoming (≤90 days), sorted soonest
+  first.
+- "AI prioritise" adds an optional short, directive action brief on top
+  of the heuristic list, naming which 3–5 items to act on first and why.
+
+**Also in this pass:**
+- About screen reworked as a step-through with chevrons (‹ Previous /
+  Next ›) and dot navigation across the 8 pillar cards, rather than one
+  long scroll.
+- Contract Summary Intake (new screen, first shipped as a no-document
+  path): type a contract summary directly instead of uploading the signed
+  contract — this app is explicitly not meant to be a contract
+  repository. One submission seeds Tiering, the Register, and Rebates in
+  a single pass, and sets the new contract as active so QBR/Register/
+  Rebates pick it up automatically.
+- Version, About "What's new", demo tour, and floater `GUIDE_TIPS` all
+  updated to match each of the above.
+
+## v2.5.0 — About screen chevron stepper & Contract Summary Intake
+
+*(Superseded in content by v2.6.0's expansion of the same two features —
+recorded here for the version history record.)*
+
+- **About screen → chevron stepper.** The 8 pillar cards became a
+  step-through: dots + ‹ Previous / Next › chevrons, one section at a
+  time, starting at Section 0. Content unchanged, no longer a long scroll.
+- **Contract Summary Intake (new screen).** A guided, no-upload form:
+  contract/supplier name, the same 4-axis tier sliders as Tiering,
+  one-per-line Obligations/SLAs (with optional `(YYYY-MM-DD)` due-date
+  parsing), and optional rebate terms. One submit pushes into
+  `tieringBulk`, `register`, and `rebates` in a single pass, and sets it
+  as the active contract — without ever touching document parsing or
+  storing the actual contract text. Positioned explicitly on the About
+  page ("No document to upload? Start here →") and in the demo tour.
+
+## v2.4.0 — Reliability & workflow-integrity pass
 
 **Audit-driven fixes** (from a pre-contract → post-award workflow integrity audit):
 - AI calls (Claude/Gemini) now time out after 30s with a clear error and an
