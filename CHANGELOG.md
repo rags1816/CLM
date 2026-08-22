@@ -1,5 +1,20 @@
 # Changelog
 
+v2.6.0
+What's in this pass:
+
+Multi-QBR — STATE.qbrs[] collection, picker UI (Open/Delete/+ New), backward-compatible migration from old single-QBR saves, demo data now seeds 2 QBRs, and Governance now aggregates breaches and "top-tier contract with no QBR at all" across every saved QBR, not just whichever one's open.
+Two-page Contract Brief — new screen, contract dropdown pulls tiering/register/rebates/feedback/QBR status together automatically, AI-drafted handover narrative, Word export.
+Renewal & Obligation Watch Agent — lives on Governance, scans every open register item across the whole portfolio (not just the tab you happen to be on), buckets into critical/urgent/upcoming, with an optional AI-prioritized action brief on top.
+
+Version bumped to 2.6.0, About/What's New, demo tour, and GUIDE_TIPS all updated to match.
+
+v2.5.0
+What's in this pass:
+
+About screen → chevron stepper. The 8 pillar cards are now a step-through: dots + ‹ Previous / Next › chevrons, one section at a time, starting at Section 0. Content unchanged, just no longer a long scroll.
+Contract Summary Intake (new screen). A guided, no-upload form: contract/supplier name, the same 4-axis tier sliders as Tiering, one-per-line Obligations/SLAs (with optional (YYYY-MM-DD) due-date parsing), and optional rebate terms. One submit pushes into tieringBulk, register, and rebates in a single pass, and sets it as the active contract (so QBR/Register/Rebates pick it up) — without ever touching document parsing or storing the actual contract text. Positioned explicitly on the About page ("No document to upload? Start here →") and in the demo tour, so it's a clear alternative path,
+
 All notable changes to CLM Suite are recorded here, most recent first. For
 version history prior to this file's creation, see the **Version history**
 section of `METHODOLOGY.md`.
