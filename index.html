@@ -155,7 +155,7 @@
 
 /* ---------- constants ---------- */
 /* ---------- version (single source of truth — bump this, nothing else) ---------- */
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.7.0';
 
 const SCREENS = [
   {id:'about', label:'About'},
@@ -166,6 +166,7 @@ const SCREENS = [
   {id:'rebates', label:'Rebates'},
   {id:'qbr', label:'QBR'},
   {id:'coverage', label:'Coverage & Feedback'},
+  {id:'brief', label:'Contract Brief'},
   {id:'scorecard', label:'Maturity'},
   {id:'governance', label:'Governance'},
   {id:'settings', label:'⚙ Settings'}
@@ -226,15 +227,16 @@ function tierBucketCounts(bulk){
 
 const GUIDE_TIPS = {
   about:['This is the front door — the pitch, the framework at a glance, and where to start.','Head to Settings first if you want AI drafting (Claude/Gemini) rather than Sandbox mode.','See the "offline vs. internet" card below for what needs a connection.','Use the ‹ Previous / Next › chevrons to step through Sections 0–7 one at a time.'],
-  intake:['This is the no-document path: enter a contract summary directly instead of uploading the signed contract itself — this app is not meant to be your contract repository.','One submission seeds Tiering, the Register, and Rebates in a single pass — review and refine each on its own tab afterwards.','Obligations/SLAs/KPIs — one per line; a due date after each line in parentheses is picked up automatically, e.g. "Insurance renewal (2027-01-15)".','Leave the rebate fields blank if this contract has no rebate — nothing is created if threshold/rate are both empty.'],
+  intake:['This is the no-document path: enter a contract summary directly instead of uploading the signed contract itself — this app is not meant to be your contract repository.','Optional AI step at the top: describe the contract in plain English and "Suggest with AI" pre-fills tier scores, obligations, SLAs and rebate terms below — you review and edit every field before anything is created.','One submission seeds Tiering, the Register, and Rebates in a single pass — review and refine each on its own tab afterwards.','Obligations/SLAs/KPIs — one per line; a due date after each line in parentheses is picked up automatically, e.g. "Insurance renewal (2027-01-15)".','Leave the rebate fields blank if this contract has no rebate — nothing is created if threshold/rate are both empty.'],
   tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs.','The bulk table also has optional UNSPSC/CPV code fields — manual entry only, no lookup or validation.','Uploading a confidential contract? Check the badge above the upload box: Sandbox keeps it fully local (offline heuristics); Claude/Gemini sends it out for a higher-fidelity AI read. Switch modes in ⚙ Settings first if you need to.'],
   framework:['The full 0–7 framework brief, plus benchmarking references (CIPS, Hackett, WorldCC).','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.','If a contract is active (uploaded on Tiering), the summary is grounded in a full-document AI review of it, not just your org profile fields — long documents offer a quick vs. full review choice with a cost estimate first.'],
-  qbr:['Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.','If a contract is active, "AI Extract KPIs/SLAs" pulls them straight from it — offers the same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract KPIs/SLAs" would use.'],
+  qbr:['This screen holds many QBRs, one per supplier/period — open the picker at the top to switch between them or start a new one.','Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.','If a contract is active, "AI Extract KPIs/SLAs" pulls them straight from it — offers the same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract KPIs/SLAs" would use.','Governance now rolls up risk across every saved QBR, not just the one currently open.'],
   rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.','If a contract is active, "AI Extract Rebates" pulls rebate tiers straight from it — same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract Rebates" would use.'],
   register:['One register for obligations, SLAs, and change orders — filter by type. Status auto-flags overdue items by due date.','Upload the contract once on the 0 · Tiering tab (Step 0) — this tab reflects it automatically under "Contract Analysis & Staging," with candidate obligation/SLA clauses staged for your review.','The "AI document review" panel below runs a full structured review of the active contract — long documents (over ~6,000 characters) show a chunk-count and cost estimate first, with a choice between a full chunked review (covers the whole document) or a quick first-section-only pass.','Its suggested tier is sourced from the same cached AI document review Tiering uses — no separate, possibly-disagreeing estimate.'],
   coverage:['Three logs in one place: category spend coverage, stakeholder feedback, and supplier collaboration opportunities.','% spend under contract here feeds the Governance rollup — keep it current, it\'s the headline leakage indicator.'],
   scorecard:['Score your organisation 1–5 across each dimension. This feeds the Governance rollup.','Re-run quarterly to track maturity trend.','This maturity assessment is CLM Suite\'s own model — 15 questions across 6 dimensions. It\'s informed by, but not copied from, CIPS/Hackett/WorldCC research; see the Framework tab for the specific benchmarks.'],
-  governance:['This is the CPO-facing rollup: spend coverage, tier mix, overdue obligations, maturity gaps — the value-leak view.','Everything here is computed live from the other tabs.','PowerPoint deck export needs internet to load the library once per session.'],
+  governance:['This is the CPO-facing rollup: spend coverage, tier mix, overdue obligations, maturity gaps — the value-leak view.','Everything here is computed live from the other tabs.','PowerPoint deck export needs internet to load the library once per session.','Risks and to-do now also cover breached QBRs and top-tier contracts missing a QBR entirely, aggregated across every saved QBR, not just the one open.','🔔 Renewal & Obligation Watch scans every open register item portfolio-wide for anything overdue or due soon.','🔍 Cross-Contract Pattern Scan looks for themes recurring across multiple contracts at once — needs at least 2 contracts with data.'],
+  brief:['A two-page handover document for one contract — pick a contract, and it pulls together tiering, key dates, rebate status, top risks, and recent feedback from every other tab automatically.','This is the document a procurement manager would hand to the contract manager taking over day-to-day ownership — separate from the QBR (a periodic performance review) and the Framework brief (the whole methodology).','"Draft handover narrative" writes a short AI paragraph grounding the brief in what\'s actually on file — works in Sandbox mode too, offline.','Export to Word for a clean two-page document; nothing here is stored beyond what already exists on the other tabs.'],
   settings:['Sandbox mode drafts offline using templates — no key needed, good for testing.','Claude/Gemini calls go direct from your browser to the provider API using your own key. Keys are stored only in this browser\'s localStorage, never sent anywhere else by this app.','Set a fallback provider so a blocked/failed call still returns something useful (Sandbox is the safest default).','"Ground with web search" is off by default — without it, AI drafts come from trained knowledge only, not a live lookup.','"Test connection" and other AI calls now surface the actual API error message on failure (e.g. bad key, blocked network) rather than just a generic error.','The full-document "AI document review" (Tiering/Register/Rebates/QBR) uses Gemini directly when Primary mode is Claude or Gemini, regardless of which of those two is selected — that keeps its cost estimate accurate. In Sandbox mode it stays fully local instead — no Gemini call is made even if a Gemini key is stored.','Uploading on a non-Sandbox mode with a Gemini key set shows a one-time confirmation before the first upload each session, since that document\'s content will actually be sent to Gemini.']
 };
 
@@ -340,7 +342,7 @@ function applyQuickAdd(spec){
   }else if(spec.action==='rebates'){
     spec.rows.forEach(r=> STATE.rebates.push({id:uid(), contractName:r.contractName||'', tierName:r.tierName, threshold:r.threshold, ratePct:r.ratePct, spendToDate:0, status:'Open'}));
   }
-  saveState();
+  saveQbr();
 }
 /* ---------- charts (canvas-based: same drawing fns power on-screen + exported images) ---------- */
 function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight){
@@ -468,13 +470,16 @@ const DEFAULT_STATE = {
   tieringBulk:[],
   tierScheme:'standard',
   qbr:{supplier:'',contractId:'',period:'',kpis:[],slas:[],rebates:'',risks:'',actions:'',narrative:'',recommendations:''},
+  qbrs:[],
+  qbrOpenId:null,
   register:[],
   rebates:[],
   coverage:{categories:[], feedback:[], collaboration:[]},
   governanceSummary:'',
   scorecard:{},
   framework:{industry:'', spend:'', maturity:'Ad hoc', summaryText:''},
-  activeContract:{id:'', name:'', text:'', truncNote:'', pageOffsets:[]}
+  activeContract:{id:'', name:'', text:'', truncNote:'', pageOffsets:[]},
+  briefNarratives:{}
 };
 let STATE = loadState();
 
@@ -495,6 +500,16 @@ function loadState(){
       }
     };
     merge(state, parsed);
+    // v2.5 -> v2.6 migration: a single STATE.qbr used to be the only QBR record. If this state
+    // predates STATE.qbrs and that single QBR has real content, file it into the collection once
+    // so it isn't silently dropped when the multi-QBR picker takes over.
+    if((!state.qbrs || state.qbrs.length===0) && state.qbr && state.qbr.supplier){
+      const migrated = JSON.parse(JSON.stringify(state.qbr));
+      migrated.id = migrated.id || uid();
+      state.qbrs = [migrated];
+      state.qbrOpenId = migrated.id;
+      state.qbr.id = migrated.id;
+    }
     return state;
   }catch(e){ return JSON.parse(JSON.stringify(DEFAULT_STATE)); }
 }
@@ -866,7 +881,7 @@ function render(){
   const map = {
     about: renderAbout, intake: renderIntake, tiering: renderTiering, framework: renderFramework,
     qbr: renderQBR, rebates: renderRebates, register: renderRegister, coverage: renderCoverage,
-    scorecard: renderScorecard, governance: renderGovernance, settings: renderSettings
+    scorecard: renderScorecard, governance: renderGovernance, settings: renderSettings, brief: renderBrief
   };
   app.innerHTML = (map[STATE.screen]||renderAbout)();
   wireScreen(STATE.screen);
@@ -897,12 +912,13 @@ function floaterScreenSummary(){
   switch(STATE.screen){
     case 'intake': return `Contract Summary Intake form — a no-document path to create a contract record (tiering + register + rebate) from typed summary fields instead of an uploaded file.`;
     case 'tiering': return `Current bulk table has ${STATE.tieringBulk.length} contract(s); naming scheme is "${STATE.tierScheme}".`;
-    case 'qbr': return `Current QBR is for supplier "${STATE.qbr.supplier||'(unset)'}", period "${STATE.qbr.period||'(unset)'}", with ${STATE.qbr.kpis.length} KPI(s) and ${STATE.qbr.slas.length} SLA(s) logged.`;
+    case 'qbr': return `${STATE.qbrs.length} QBR(s) saved in total. Currently editing: supplier "${STATE.qbr.supplier||'(unset)'}", period "${STATE.qbr.period||'(unset)'}", with ${STATE.qbr.kpis.length} KPI(s) and ${STATE.qbr.slas.length} SLA(s) logged.`;
     case 'rebates': return `Rebate tracker currently has ${STATE.rebates.length} tier(s) logged.`;
     case 'register': return `Register currently has ${STATE.register.length} item(s) across Obligation/SLA/Change Order types.`;
     case 'coverage': return `Coverage tab has ${STATE.coverage.categories.length} categor${STATE.coverage.categories.length===1?'y':'ies'}, ${STATE.coverage.feedback.length} feedback entries, ${STATE.coverage.collaboration.length} collaboration opportunities logged.`;
     case 'scorecard': return `Maturity scorecard has 15 questions across 6 dimensions, each scored 1-5.`;
     case 'governance': return `Governance rolls up tiering, register, rebates, coverage and scorecard data live — nothing entered here directly.`;
+    case 'brief': return `Contract Brief for "${BRIEF_SELECTED||'(none selected)'}" — a two-page handover summary assembled from Tiering, Register, Rebates and Coverage.`;
     case 'framework': return `This screen shows the full 0-7 CLM framework brief with CIPS/Hackett/WorldCC benchmarking, plus quick-add buttons that seed other screens.`;
     default: return '';
   }
@@ -1016,7 +1032,7 @@ function renderAbout(){
   </div>
   <div class="card">
     <h2>What's new</h2>
-    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.5.0 — a chevron step-through for this About screen, and a new Contract Summary Intake screen: a no-document path that seeds Tiering, the Register, and Rebates from a typed summary instead of an uploaded file, since this app is not meant to be a contract repository. Multi-QBR and a two-pager Contract Brief are next.</p>
+    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.7.0 — a multi-step AI intake agent on Contract Summary Intake (describe a contract in plain English, review the AI-suggested tier/obligations/SLAs/rebate terms, then commit), and a Cross-Contract Pattern Scan on Governance that looks for recurring themes across the whole portfolio at once, alongside v2.6.0's Multi-QBR, Contract Brief, and Renewal & Obligation Watch agent.</p>
   </div>`;
 }
 
@@ -1032,6 +1048,13 @@ function renderIntake(){
   <h2>Contract Summary Intake</h2>
   <div class="card">
     <p class="small muted">Use this when you don't want to (or can't) upload the actual signed contract — this app is not designed to be a contract repository. Type a short summary here instead; one submission seeds Tiering, the Register, and Rebates in a single pass, ready to refine on their own tabs.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">0 · Describe it (optional — AI-assisted)</h3>
+    <p class="small muted">Paste or type a plain-English description of the contract. The AI suggests tier scores and drafts starter obligations/SLAs/rebate terms into the fields below for you to review and edit — nothing is created until you click "Create contract record" at the bottom.</p>
+    <textarea id="intakeAiDescription" placeholder="e.g. 3-year logistics contract with Global Logistics Co, ~$850k/year, scheduled freight delivery with a 98% on-time SLA, insurance renewal each January, 2% volume rebate above $500k spend, single-source risk on the Northeast lane..."></textarea>
+    <button class="btn gold small" id="btnIntakeAiSuggest" style="margin-top:8px;">Suggest with AI</button>
+    <span id="intakeAiStatus" class="small" style="margin-left:8px;"></span>
   </div>
   <div class="card">
     <h3 style="margin-top:0;">1 · Contract identity</h3>
@@ -1082,6 +1105,39 @@ function wireIntake(){
       document.getElementById('intake-score-'+e.target.dataset.intakeAxis).textContent = e.target.value;
     });
   });
+  const aiBtn = document.getElementById('btnIntakeAiSuggest');
+  if(aiBtn) aiBtn.addEventListener('click', async ()=>{
+    const desc = document.getElementById('intakeAiDescription').value.trim();
+    const status = document.getElementById('intakeAiStatus');
+    if(!desc){ status.innerHTML = '<span style="color:var(--red);">Describe the contract first.</span>'; return; }
+    aiBtn.disabled = true; aiBtn.textContent = 'Analyzing…';
+    status.textContent = '';
+    const prompt = `Read this plain-English contract description and respond with ONLY a JSON object — no markdown fences, no preamble, no trailing text. Shape:
+{"name":"contract or supplier name","category":"category text","value":1-5,"risk":1-5,"criticality":1-5,"impact":1-5,"obligations":["obligation text, optionally ending in (YYYY-MM-DD)", "..."],"slas":["sla text", "..."],"rebateTier":"tier name or empty string","rebateThreshold":"threshold text or empty string","rebateRatePct":number-or-0}
+Score value/risk/criticality/impact 1-5 using standard CIPS/Hackett contract-tiering judgment (5 = highest spend/risk/criticality/impact). List up to 6 obligations and up to 6 SLAs as short phrases inferred from the description — append a due date in parentheses as (YYYY-MM-DD) only if one is stated or clearly inferable. Leave rebate fields empty/0 if no rebate is mentioned.
+Description: ${desc}`;
+    try{
+      const raw = await askAI(prompt);
+      const clean = raw.replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(clean);
+      if(parsed.name) document.getElementById('intakeName').value = parsed.name;
+      if(parsed.category) document.getElementById('intakeCategory').value = parsed.category;
+      ['value','risk','criticality','impact'].forEach(k=>{
+        const v = Math.max(1, Math.min(5, parseInt(parsed[k])||3));
+        const inp = document.querySelector(`[data-intake-axis="${k}"]`);
+        if(inp){ inp.value = v; document.getElementById('intake-score-'+k).textContent = v; }
+      });
+      if(Array.isArray(parsed.obligations) && parsed.obligations.length) document.getElementById('intakeObligations').value = parsed.obligations.join('\n');
+      if(Array.isArray(parsed.slas) && parsed.slas.length) document.getElementById('intakeSlas').value = parsed.slas.join('\n');
+      if(parsed.rebateTier) document.getElementById('intakeRebateTier').value = parsed.rebateTier;
+      if(parsed.rebateThreshold) document.getElementById('intakeRebateThreshold').value = parsed.rebateThreshold;
+      if(parsed.rebateRatePct) document.getElementById('intakeRebateRate').value = parsed.rebateRatePct;
+      status.innerHTML = '<span style="color:var(--green);">Suggested — review every field below (name, category, tier, obligations, SLAs, rebate), then click "Create contract record" to commit. Nothing has been saved yet.</span>';
+    }catch(e){
+      status.innerHTML = `<span style="color:var(--red);">Could not use the AI suggestion (${esc(e.message)}) — try rephrasing, or fill in the fields below manually.</span>`;
+    }
+    aiBtn.disabled = false; aiBtn.textContent = 'Suggest with AI';
+  });
   document.getElementById('btnIntakeSubmit').addEventListener('click', ()=>{
     const status = document.getElementById('intakeStatus');
     const name = document.getElementById('intakeName').value.trim();
@@ -1108,8 +1164,7 @@ function wireIntake(){
       rebateAdded = true;
     }
     STATE.activeContract = {id:uid(), name, text:'', truncNote:'', pageOffsets:[]};
-    STATE.qbr.supplier = name;
-    STATE.qbr.contractId = STATE.activeContract.id;
+    openOrCreateQbrFor(name, STATE.activeContract.id);
     saveState();
     status.innerHTML = `<span style="color:var(--green);">Created — ${newItems.length} register item(s) added${rebateAdded?', 1 rebate tier added':''}, tiered on the bulk table. Set as active contract for QBR/Register/Rebates.</span>`;
     ['intakeName','intakeCategory','intakeValue','intakeObligations','intakeSlas','intakeRebateTier','intakeRebateThreshold','intakeRebateRate','intakeRebateSpend'].forEach(id=>{ document.getElementById(id).value=''; });
@@ -1288,6 +1343,50 @@ function renderFramework(){
 }
 
 /* ========== QBR ========== */
+function blankQbrShape(){
+  return {id:'', supplier:'', contractId:'', period:'', kpis:[], slas:[], rebates:'', risks:'', actions:'', narrative:'', recommendations:''};
+}
+// Upserts the currently-open STATE.qbr into the STATE.qbrs collection (keyed by STATE.qbrOpenId),
+// then persists. Called in place of a bare saveState() from anywhere that edits STATE.qbr, so the
+// picker list and Governance's cross-QBR aggregation always see the latest edits. A QBR with no
+// supplier name yet isn't filed into the collection -- it stays a scratch draft until named.
+function saveQbr(){
+  if(STATE.qbr.supplier){
+    if(!STATE.qbrOpenId){ STATE.qbrOpenId = uid(); }
+    STATE.qbr.id = STATE.qbrOpenId;
+    const snapshot = JSON.parse(JSON.stringify(STATE.qbr));
+    const idx = STATE.qbrs.findIndex(x=>x.id===STATE.qbrOpenId);
+    if(idx>=0) STATE.qbrs[idx] = snapshot; else STATE.qbrs.push(snapshot);
+  }
+  saveState();
+}
+function openQbr(id){
+  const found = STATE.qbrs.find(x=>x.id===id);
+  if(!found) return;
+  STATE.qbr = JSON.parse(JSON.stringify(found));
+  STATE.qbrOpenId = id;
+  saveState();
+}
+function openNewQbr(prefill){
+  STATE.qbr = Object.assign(blankQbrShape(), prefill||{});
+  STATE.qbrOpenId = null;
+  saveState();
+}
+function deleteQbr(id){
+  STATE.qbrs = STATE.qbrs.filter(x=>x.id!==id);
+  if(STATE.qbrOpenId===id) openNewQbr();
+  saveState();
+}
+// Opens the existing QBR for a supplier/contract if one exists, otherwise starts a fresh one
+// prefilled with that supplier/contractId -- used by the intake form and the contract-upload flow
+// so a new contract gets its own QBR record rather than silently overwriting whichever QBR was
+// last open.
+function openOrCreateQbrFor(supplier, contractId){
+  const norm = normalizeSupplierName(supplier);
+  const existing = STATE.qbrs.find(x=>normalizeSupplierName(x.supplier)===norm);
+  if(existing) openQbr(existing.id);
+  else openNewQbr({supplier, contractId});
+}
 function normalizeSupplierName(s){
   return (s||'').toLowerCase().trim()
     .replace(/[.,]/g,'')
@@ -1345,6 +1444,40 @@ function getFeedbackForSupplier(supplierName){
   const variants = [...new Set(fuzzy.map(f=>f.subject))];
   return {matches:fuzzy, matchType: fuzzy.length ? 'fuzzy' : 'none', variants};
 }
+function renderQbrPicker(){
+  const isNewDraft = !STATE.qbrOpenId;
+  const openBadgeStatus = (qbr)=>{
+    const breached = qbr.kpis.concat(qbr.slas).filter(x=>x.status==='Breached').length;
+    const atRisk = qbr.kpis.concat(qbr.slas).filter(x=>x.status==='At risk').length;
+    if(breached) return `<span class="badge overdue">${breached} breached</span>`;
+    if(atRisk) return `<span class="badge due">${atRisk} at risk</span>`;
+    return `<span class="badge ok">On track</span>`;
+  };
+  return collapsibleBanner('qbrPicker', `QBRs on file (${STATE.qbrs.length})${STATE.qbr.supplier?' — currently editing: '+esc(STATE.qbr.supplier)+(STATE.qbr.period?' · '+esc(STATE.qbr.period):'')+(isNewDraft?' (unsaved draft)':''):''}`,
+    `${STATE.qbrs.length ? `<table><thead><tr><th>Supplier</th><th>Period</th><th>Status</th><th></th></tr></thead><tbody>
+      ${STATE.qbrs.map(qb=>`<tr>
+        <td>${esc(qb.supplier)||'(unnamed)'}</td>
+        <td>${esc(qb.period)||'—'}</td>
+        <td>${openBadgeStatus(qb)}</td>
+        <td><button class="btn small ${qb.id===STATE.qbrOpenId?'gold':'outline'}" data-open-qbr="${qb.id}">${qb.id===STATE.qbrOpenId?'Editing':'Open'}</button>
+            <button class="btn small danger" data-del-qbr="${qb.id}">✕</button></td>
+      </tr>`).join('')}
+    </tbody></table>` : '<p class="small muted">No QBRs saved yet — fill in a supplier name below to start one, or use "+ New QBR".</p>'}
+    <button class="btn small outline" id="btnNewQbr" style="margin-top:10px;">+ New QBR</button>`,
+    {defaultOpen: STATE.qbrs.length<=1});
+}
+function wireQbrPicker(){
+  document.querySelectorAll('[data-open-qbr]').forEach(b=>{
+    b.addEventListener('click', ()=>{ openQbr(b.dataset.openQbr); render(); });
+  });
+  document.querySelectorAll('[data-del-qbr]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      if(confirm('Delete this saved QBR? This cannot be undone.')){ deleteQbr(b.dataset.delQbr); render(); }
+    });
+  });
+  const newBtn = document.getElementById('btnNewQbr');
+  if(newBtn) newBtn.addEventListener('click', ()=>{ openNewQbr(); render(); });
+}
 function renderQBR(){
   const q = STATE.qbr;
   const fb = getFeedbackForSupplier(q.supplier);
@@ -1356,6 +1489,7 @@ function renderQBR(){
   const active = STATE.activeContract && STATE.activeContract.name;
   return `
   <h2>QBR Template</h2>
+  ${renderQbrPicker()}
   <p style="margin:-6px 0 12px;">${active ? `<span class="badge ok" style="padding: 6px 10px;">📄 Active: ${esc(STATE.activeContract.name)}</span>` : '<span class="small muted">No active contract loaded — upload one on the 0 · Tiering tab to enable AI Extract.</span>'}</p>
   ${collapsibleBanner('qbrTools', '📄 Reports & AI tools', `<div class="row" style="align-items:center;">
       <button class="btn gold" id="btnQbrDraft">AI draft QBR narrative</button>
@@ -1877,6 +2011,159 @@ function renderScorecard(){
   <div class="row"><button class="btn outline" id="btnScExport">Export scorecard to Word</button></div>`;
 }
 
+/* ========== CONTRACT BRIEF (2-pager handover) ========== */
+let BRIEF_SELECTED = '';
+function briefRiskLines(name){
+  const risks = [];
+  const reg = getRegisterForSupplier(name).matches;
+  const overdue = reg.filter(r=> r.status!=='Complete' && r.dueDate && daysUntil(r.dueDate)<0);
+  if(overdue.length) risks.push(`${overdue.length} overdue obligation/SLA/change-order item(s) — see linked register below.`);
+  const dueSoon = reg.filter(r=> r.status!=='Complete' && r.dueDate && daysUntil(r.dueDate)>=0 && daysUntil(r.dueDate)<=30);
+  if(dueSoon.length) risks.push(`${dueSoon.length} item(s) due within 30 days.`);
+  const rebates = getRebatesForSupplier(name).matches;
+  const disputed = rebates.filter(r=>r.status==='Disputed');
+  if(disputed.length) risks.push(`${disputed.length} rebate tier(s) marked Disputed — unresolved.`);
+  const feedback = getFeedbackForSupplier(name).matches;
+  const lowFb = feedback.filter(f=>(Number(f.rating)||0)<=2);
+  if(lowFb.length) risks.push(`${lowFb.length} stakeholder feedback entr${lowFb.length===1?'y':'ies'} rated 2/5 or below.`);
+  const existingQbr = STATE.qbrs.find(qb=>normalizeSupplierName(qb.supplier)===normalizeSupplierName(name));
+  if(!existingQbr) risks.push('No QBR record exists yet for this contract — consider opening one on handover.');
+  else{
+    const breaches = existingQbr.kpis.concat(existingQbr.slas).filter(x=>x.status==='Breached');
+    if(breaches.length) risks.push(`${breaches.length} breached KPI/SLA on the current QBR record.`);
+  }
+  if(!risks.length) risks.push('No material risks flagged from current data.');
+  return risks;
+}
+function renderBrief(){
+  const names = [...new Set(STATE.tieringBulk.map(r=>r.name).filter(Boolean))];
+  if(BRIEF_SELECTED && !names.includes(BRIEF_SELECTED)) BRIEF_SELECTED = '';
+  if(!BRIEF_SELECTED && names.length) BRIEF_SELECTED = names[0];
+  const row = STATE.tieringBulk.find(r=>r.name===BRIEF_SELECTED);
+  const score = row ? weightedScore(row) : null;
+  const tier = row ? getTier(score) : null;
+  const reg = BRIEF_SELECTED ? getRegisterForSupplier(BRIEF_SELECTED).matches : [];
+  const openReg = reg.filter(r=>r.status!=='Complete');
+  const nextDue = openReg.filter(r=>r.dueDate).sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];
+  const rebates = BRIEF_SELECTED ? getRebatesForSupplier(BRIEF_SELECTED).matches : [];
+  const feedback = BRIEF_SELECTED ? getFeedbackForSupplier(BRIEF_SELECTED).matches : [];
+  const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length) : null;
+  const risks = BRIEF_SELECTED ? briefRiskLines(BRIEF_SELECTED) : [];
+  const existingQbr = STATE.qbrs.find(qb=>normalizeSupplierName(qb.supplier)===normalizeSupplierName(BRIEF_SELECTED||''));
+  return `
+  <h2>Contract Brief</h2>
+  <div class="card">
+    <p class="small muted">A two-page handover document for one contract — the summary a procurement manager would give a contract manager taking over day-to-day ownership. Separate from the QBR (a periodic performance review) and the Framework brief (the whole methodology).</p>
+    <div class="field" style="max-width:360px;"><label>Contract</label>
+      <select id="briefSelect">
+        ${names.length ? names.map(n=>`<option ${n===BRIEF_SELECTED?'selected':''}>${esc(n)}</option>`).join('') : '<option>No contracts on file — add one on Tiering or Contract Intake</option>'}
+      </select>
+    </div>
+  </div>
+  ${!BRIEF_SELECTED ? '' : `
+  ${collapsibleBanner('briefTools', '📄 Reports & AI tools', `<div class="row" style="align-items:center;">
+      <button class="btn gold" id="btnBriefDraft">Draft handover narrative</button>
+      <button class="btn outline" id="btnBriefExport">Export brief to Word</button>
+    </div>`, {sticky:true})}
+  <div class="card">
+    <h3 style="margin-top:0;">Page 1 · Contract identity & standing</h3>
+    <div class="result-strip">
+      <div><div class="eyebrow" style="color:#a39a89;">${esc(BRIEF_SELECTED)}</div><div class="tname">${tier?esc(tierDisplayName(tier.code)):'—'}</div></div>
+      <div class="tscore small mono">${score!=null?score.toFixed(2):'—'} weighted score</div>
+    </div>
+    <div class="grid2" style="margin-top:14px;">
+      <div>
+        <p class="small"><b>Value</b> ${row?row.value:'—'}/5 &nbsp; <b>Risk</b> ${row?row.risk:'—'}/5 &nbsp; <b>Criticality</b> ${row?row.criticality:'—'}/5 &nbsp; <b>Impact</b> ${row?row.impact:'—'}/5</p>
+        <p class="small"><b>Next key date:</b> ${nextDue ? esc(nextDue.description)+' — '+esc(nextDue.dueDate)+' '+statusBadge(nextDue) : 'None on file'}</p>
+        <p class="small"><b>Open register items:</b> ${openReg.length} of ${reg.length} total</p>
+      </div>
+      <div>
+        <p class="small"><b>Rebate standing:</b> ${rebates.length ? rebates.map(r=>`${esc(r.tierName)} — ${r.ratePct}% (${esc(r.status)})`).join('; ') : 'No rebate tier on file'}</p>
+        <p class="small"><b>QBR record:</b> ${existingQbr ? `On file — period ${esc(existingQbr.period)||'(not set)'}` : 'None yet'}</p>
+        <p class="small"><b>Stakeholder rating:</b> ${avgRating!=null ? avgRating.toFixed(1)+'/5 across '+feedback.length+' entr'+(feedback.length===1?'y':'ies') : 'No feedback logged'}</p>
+      </div>
+    </div>
+    <h4 style="margin-bottom:6px;">Top risks</h4>
+    <ul style="font-size:13px;line-height:1.7;margin-top:0;">${risks.map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">Page 2 · Handover detail</h3>
+    <h4>Open register items</h4>
+    ${openReg.length ? `<table><thead><tr><th>Type</th><th>Description</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead><tbody>
+      ${openReg.map(r=>`<tr><td>${esc(r.type)}</td><td>${esc(r.description)}</td><td>${esc(r.owner)}</td><td>${esc(r.dueDate)||'—'}</td><td>${statusBadge(r)}</td></tr>`).join('')}
+    </tbody></table>` : '<p class="small muted">None on file.</p>'}
+    <h4 style="margin-top:16px;">Recent stakeholder feedback</h4>
+    ${feedback.length ? feedback.slice(0,4).map(f=>`<div class="small" style="margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px;"><b>${esc(f.stakeholder||'Unnamed')}</b> <span class="mono">${f.rating}/5</span> ${f.date?'· '+esc(f.date):''}<br><span class="muted">${esc(f.comment||'(no comment)')}</span></div>`).join('') : '<p class="small muted">None on file.</p>'}
+    <h4 style="margin-top:16px;">Recommended next actions for the incoming owner</h4>
+    <ul style="font-size:13px;line-height:1.7;">${buildQbrRecommendations(existingQbr||{kpis:[],slas:[]}, reg, rebates, feedback).map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
+    <div class="field" style="margin-top:14px;"><label>Handover narrative (editable)</label>
+      <textarea id="briefNarrative" style="min-height:120px;">${esc(STATE.briefNarratives && STATE.briefNarratives[BRIEF_SELECTED] || '')}</textarea>
+    </div>
+  </div>`}`;
+}
+function wireBrief(){
+  const sel = document.getElementById('briefSelect');
+  if(sel) sel.addEventListener('change', e=>{ BRIEF_SELECTED = e.target.value; render(); });
+  const narr = document.getElementById('briefNarrative');
+  if(narr) narr.addEventListener('input', e=>{
+    STATE.briefNarratives = STATE.briefNarratives || {};
+    STATE.briefNarratives[BRIEF_SELECTED] = e.target.value;
+    saveState();
+  });
+  const draftBtn = document.getElementById('btnBriefDraft');
+  if(draftBtn) draftBtn.addEventListener('click', async ()=>{
+    const name = BRIEF_SELECTED;
+    const risks = briefRiskLines(name).join(' ');
+    const reg = getRegisterForSupplier(name).matches;
+    const rebates = getRebatesForSupplier(name).matches;
+    const row = STATE.tieringBulk.find(r=>r.name===name);
+    const tier = row ? tierDisplayName(getTier(weightedScore(row)).code) : 'unset';
+    draftBtn.disabled = true; draftBtn.textContent = 'Drafting…';
+    const prompt = `Write a 100-120 word handover narrative for a Contract Brief being given by a procurement manager to the contract manager taking over "${name}", tier ${tier}. Open register items: ${reg.filter(r=>r.status!=='Complete').length}. Rebate tiers: ${rebates.map(r=>r.tierName+' '+r.status).join(', ')||'none'}. Known risks: ${risks}. Write plain prose the incoming owner would actually read — what to watch first, not a generic summary.`;
+    try{
+      const text = await askAI(prompt);
+      STATE.briefNarratives = STATE.briefNarratives || {};
+      STATE.briefNarratives[name] = text;
+      saveState(); render();
+    }catch(e){ alert(e.message); }
+    draftBtn.disabled = false; draftBtn.textContent = 'Draft handover narrative';
+  });
+  const exportBtn = document.getElementById('btnBriefExport');
+  if(exportBtn) exportBtn.addEventListener('click', ()=>{
+    const name = BRIEF_SELECTED;
+    const row = STATE.tieringBulk.find(r=>r.name===name);
+    const score = row ? weightedScore(row) : null;
+    const tier = row ? getTier(score) : null;
+    const reg = getRegisterForSupplier(name).matches;
+    const openReg = reg.filter(r=>r.status!=='Complete');
+    const rebates = getRebatesForSupplier(name).matches;
+    const feedback = getFeedbackForSupplier(name).matches;
+    const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length).toFixed(1) : null;
+    const risks = briefRiskLines(name);
+    const existingQbr = STATE.qbrs.find(qb=>normalizeSupplierName(qb.supplier)===normalizeSupplierName(name));
+    const narrative = (STATE.briefNarratives && STATE.briefNarratives[name]) || '';
+    const blocks = [
+      {p:`${name} — ${tier?tierDisplayName(tier.code):'—'} — weighted score ${score!=null?score.toFixed(2):'—'}`},
+      {h:2,text:'Page 1 — Contract identity & standing'},
+      {p:`Value ${row?row.value:'—'}/5, Risk ${row?row.risk:'—'}/5, Criticality ${row?row.criticality:'—'}/5, Impact ${row?row.impact:'—'}/5`},
+      {p:`Rebate standing: ${rebates.length ? rebates.map(r=>`${r.tierName} — ${r.ratePct}% (${r.status})`).join('; ') : 'No rebate tier on file'}`},
+      {p:`QBR record: ${existingQbr ? 'On file — period '+(existingQbr.period||'(not set)') : 'None yet'}`},
+      {p:`Stakeholder rating: ${avgRating!=null ? avgRating+'/5 across '+feedback.length+' entries' : 'No feedback logged'}`},
+      {h:2,text:'Top risks'},
+      ...risks.map(r=>({p:'• '+r})),
+      {h:2,text:'Page 2 — Handover detail'},
+      {h:2,text:'Open register items'},
+      {table:{headers:['Type','Description','Owner','Due','Status'], rows:openReg.map(r=>[r.type,r.description,r.owner,r.dueDate,r.status])}},
+      {h:2,text:'Recent stakeholder feedback'},
+      {table:{headers:['Stakeholder','Date','Rating','Comment'], rows:feedback.slice(0,6).map(f=>[f.stakeholder,f.date,f.rating,f.comment])}},
+      {h:2,text:'Recommended next actions'},
+      ...buildQbrRecommendations(existingQbr||{kpis:[],slas:[]}, reg, rebates, feedback).map(r=>({p:'• '+r})),
+      {h:2,text:'Handover narrative'},{p:narrative||'—'}
+    ];
+    exportDocxReal('Contract Brief — '+name, blocks);
+  });
+}
+
 /* ========== GOVERNANCE ========== */
 function computeGovernanceData(){
   const bulk = STATE.tieringBulk;
@@ -1904,7 +2191,17 @@ function computeGovernanceData(){
   const overallCoveragePct = totalSpend ? (weightedCovered/totalSpend*100) : 0;
   const whiteSpace = cats.filter(r=>(Number(r.pctContract)||0)<50);
   const lowFeedback = STATE.coverage.feedback.filter(f=>(Number(f.rating)||0)<=2);
-  return {bulk,buckets,tierDataErrors,reg,overdue,dimAvg,weakest,rebates,totalAccrued,unreconciled,disputed,cats,totalSpend,overallCoveragePct,whiteSpace,lowFeedback};
+  // Cross-QBR aggregation: scans every saved QBR (not just whichever one happens to be open) for
+  // breached KPIs/SLAs, and flags top-tier contracts that have no QBR record at all.
+  const qbrs = STATE.qbrs || [];
+  const qbrBreaches = qbrs.filter(qb=> qb.kpis.concat(qb.slas).some(x=>x.status==='Breached'));
+  const topTierNames = bulk.filter(r=>{
+    const t = getTier(weightedScore(r));
+    return t.code==='t1' || t.code==='gold';
+  }).map(r=>r.name).filter(Boolean);
+  const qbrNamesNorm = new Set(qbrs.map(qb=>normalizeSupplierName(qb.supplier)));
+  const topTierWithoutQbr = topTierNames.filter(n=>!qbrNamesNorm.has(normalizeSupplierName(n)));
+  return {bulk,buckets,tierDataErrors,reg,overdue,dimAvg,weakest,rebates,totalAccrued,unreconciled,disputed,cats,totalSpend,overallCoveragePct,whiteSpace,lowFeedback,qbrs,qbrBreaches,topTierWithoutQbr};
 }
 function buildGovernanceInsights(d){
   const risks = [];
@@ -1913,6 +2210,8 @@ function buildGovernanceInsights(d){
   if(d.disputed.length) risks.push(`${d.disputed.length} rebate tier(s) marked Disputed — potential revenue leakage unresolved.`);
   if(d.whiteSpace.length) risks.push(`${d.whiteSpace.length} spend categor${d.whiteSpace.length===1?'y':'ies'} under 50% contract coverage — maverick spend / uncontrolled risk.`);
   if(d.lowFeedback.length) risks.push(`${d.lowFeedback.length} stakeholder feedback entr${d.lowFeedback.length===1?'y':'ies'} rated 2/5 or below — relationship risk.`);
+  if(d.qbrBreaches && d.qbrBreaches.length) risks.push(`${d.qbrBreaches.length} supplier(s) have a breached KPI or SLA on their QBR record: ${d.qbrBreaches.slice(0,5).map(qb=>qb.supplier||'(unnamed)').join(', ')}.`);
+  if(d.topTierWithoutQbr && d.topTierWithoutQbr.length) risks.push(`${d.topTierWithoutQbr.length} Strategic/Gold-tier contract(s) have no QBR record at all: ${d.topTierWithoutQbr.slice(0,5).join(', ')} — highest-value contracts with no formal review cadence in place.`);
   if(d.weakest.length) risks.push(`Weakest maturity dimension: "${d.weakest[0].dim}" at ${d.weakest[0].avg.toFixed(1)}/5.`);
   if(!risks.length) risks.push('No material risks flagged from current data.');
 
@@ -1922,6 +2221,8 @@ function buildGovernanceInsights(d){
   if(d.whiteSpace.length) todo.push(`Scope contracts for white-space categories: ${d.whiteSpace.slice(0,5).map(c=>c.name||'(unnamed)').join(', ')}.`);
   if(d.weakest.length) todo.push(`Run an improvement action on "${d.weakest[0].dim}" — the lowest-scoring maturity dimension.`);
   if(d.lowFeedback.length) todo.push('Follow up directly with stakeholders who gave low ratings before the next QBR cycle.');
+  if(d.qbrBreaches && d.qbrBreaches.length) todo.push(`Prioritise the next review cycle for: ${d.qbrBreaches.slice(0,5).map(qb=>qb.supplier||'(unnamed)').join(', ')} — each has an unresolved breach on record.`);
+  if(d.topTierWithoutQbr && d.topTierWithoutQbr.length) todo.push(`Open a QBR record for: ${d.topTierWithoutQbr.slice(0,5).join(', ')} before the next cycle.`);
   if(!todo.length) todo.push('No urgent actions from current data — maintain current review cadence.');
 
   const recs = [];
@@ -1930,6 +2231,112 @@ function buildGovernanceInsights(d){
   if(goldOrT1 && goldOrT1.count>0) recs.push(`Confirm every ${goldOrT1.label} contract has a named owner and an active QBR cadence — this is where value leakage is most costly.`);
   recs.push('Review this rollup at least quarterly alongside the QBR cycle so risks surface before renewal deadlines, not after.');
   return {risks, todo, recs};
+}
+/* ---------- Renewal & Obligation Watch Agent ----------
+   Proactively scans every open register item across ALL contracts for anything overdue or
+   approaching its due date, instead of relying on the person to notice a badge on a tab they
+   happen to be viewing. Runs as a pure function over existing STATE.register data (no AI call
+   needed for the scan itself) with an optional "AI prioritise" pass on top. */
+function computeWatchAlerts(){
+  const reg = STATE.register.filter(r=>r.status!=='Complete' && r.dueDate);
+  const scored = reg.map(r=>{
+    const d = daysUntil(r.dueDate);
+    let urgency = null;
+    if(d<0) urgency='critical';
+    else if(d<=30) urgency='urgent';
+    else if(d<=90) urgency='upcoming';
+    return Object.assign({}, r, {daysUntil:d, urgency});
+  }).filter(r=>r.urgency);
+  scored.sort((a,b)=>a.daysUntil-b.daysUntil);
+  return scored;
+}
+function watchLine(a){
+  return `<div class="small" style="margin:4px 0;">${statusBadge(a)} <b>${esc(a.contract)||'(no contract)'}</b> — ${esc(a.description)||'(untitled)'} <span class="muted">(${esc(a.dueDate)}, ${esc(a.owner)||'unowned'})</span></div>`;
+}
+function renderWatchAgent(){
+  const alerts = computeWatchAlerts();
+  const critical = alerts.filter(a=>a.urgency==='critical');
+  const urgent = alerts.filter(a=>a.urgency==='urgent');
+  const upcoming = alerts.filter(a=>a.urgency==='upcoming');
+  return `
+  <div class="card">
+    <div class="flex-between"><h3 style="margin:0;">🔔 Renewal & Obligation Watch</h3><button class="btn small gold" id="btnWatchAiSummary" ${alerts.length?'':'disabled'}>AI prioritise</button></div>
+    <p class="small muted">Scans every open register item across all contracts for anything overdue or approaching its due/renewal date — proactive, not just a badge you have to notice on the tab.</p>
+    ${alerts.length ? `
+      ${critical.length?`<p class="small" style="margin-top:10px;"><b style="color:var(--red);">${critical.length} critical — overdue</b></p>${critical.slice(0,6).map(watchLine).join('')}`:''}
+      ${urgent.length?`<p class="small" style="margin-top:10px;"><b style="color:var(--amber);">${urgent.length} urgent — due within 30 days</b></p>${urgent.slice(0,6).map(watchLine).join('')}`:''}
+      ${upcoming.length?`<p class="small" style="margin-top:10px;"><b>${upcoming.length} upcoming — due within 90 days</b></p>${upcoming.slice(0,6).map(watchLine).join('')}`:''}
+    ` : '<p class="small muted" style="margin-top:10px;">Nothing overdue or due within 90 days across the whole portfolio — clear runway.</p>'}
+    <div id="watchAiOut" class="small" style="margin-top:10px;"></div>
+  </div>`;
+}
+function wireWatchAgent(){
+  const btn = document.getElementById('btnWatchAiSummary');
+  if(!btn) return;
+  btn.addEventListener('click', async ()=>{
+    const alerts = computeWatchAlerts();
+    const out = document.getElementById('watchAiOut');
+    btn.disabled = true; btn.textContent = 'Prioritising…';
+    const lines = alerts.slice(0,15).map(a=>`${a.urgency} — ${a.contract||'(no contract)'}: ${a.description} due ${a.dueDate} (${a.daysUntil<0?Math.abs(a.daysUntil)+' days overdue':a.daysUntil+' days out'}), owner ${a.owner||'unassigned'}`).join('\n');
+    const prompt = `You are a contract management watch-agent. Given this list of overdue/upcoming obligations, SLAs and change orders across a contract portfolio, write a short (100-130 word) prioritised action brief for a procurement manager — which 3-5 items to act on first and why, referencing contract names and owners. Be specific and directive, not generic.\n\n${lines}`;
+    try{
+      const text = await askAI(prompt);
+      out.innerHTML = `<div style="border-top:1px solid var(--line);padding-top:8px;">${esc(text).replace(/\n/g,'<br>')}</div>`;
+    }catch(e){ out.innerHTML = `<span style="color:var(--red);">${esc(e.message)}</span>`; }
+    btn.disabled = false; btn.textContent = 'AI prioritise';
+  });
+}
+
+/* ---------- Cross-Contract Pattern Agent ----------
+   Scans a compact per-contract summary (tier, overdue count, rebate status, avg feedback rating,
+   a sample of feedback comments and register descriptions) across the WHOLE portfolio in one AI
+   call, looking for recurring themes a single-contract view can't surface -- e.g. the same clause
+   type causing overdue items on multiple suppliers, or a repeated complaint theme in feedback.
+   Needs at least 2 contracts with real data to be meaningful; the button stays disabled otherwise. */
+function buildPatternSummary(){
+  return STATE.tieringBulk.filter(r=>r.name).map(r=>{
+    const reg = getRegisterForSupplier(r.name).matches;
+    const overdue = reg.filter(x=>x.status!=='Complete' && x.dueDate && daysUntil(x.dueDate)<0);
+    const rebates = getRebatesForSupplier(r.name).matches;
+    const disputed = rebates.some(x=>x.status==='Disputed');
+    const feedback = getFeedbackForSupplier(r.name).matches;
+    const avgRating = feedback.length ? (feedback.reduce((a,f)=>a+(Number(f.rating)||0),0)/feedback.length).toFixed(1) : 'n/a';
+    const tier = tierDisplayName(getTier(weightedScore(r)).code);
+    return {
+      name: r.name, tier,
+      overdueCount: overdue.length,
+      rebateDisputed: disputed,
+      avgRating,
+      regDescriptions: reg.slice(0,4).map(x=>x.description),
+      feedbackComments: feedback.slice(0,2).map(x=>x.comment).filter(Boolean)
+    };
+  });
+}
+function renderPatternAgent(){
+  const summary = buildPatternSummary();
+  const enough = summary.length>=2;
+  return `
+  <div class="card">
+    <div class="flex-between"><h3 style="margin:0;">🔍 Cross-Contract Pattern Scan</h3><button class="btn small gold" id="btnPatternScan" ${enough?'':'disabled'}>Scan for patterns</button></div>
+    <p class="small muted">Looks across the whole portfolio at once for recurring themes a single-contract view can't show — the same issue type showing up on multiple suppliers, a repeated complaint theme in feedback, clustered rebate disputes.${enough?'':' Add at least 2 contracts with register/feedback data to enable this.'}</p>
+    <div id="patternOut" class="small" style="margin-top:10px;"></div>
+  </div>`;
+}
+function wirePatternAgent(){
+  const btn = document.getElementById('btnPatternScan');
+  if(!btn) return;
+  btn.addEventListener('click', async ()=>{
+    const summary = buildPatternSummary();
+    const out = document.getElementById('patternOut');
+    btn.disabled = true; btn.textContent = 'Scanning…';
+    const lines = summary.map(s=>`${s.name} (${s.tier}): ${s.overdueCount} overdue item(s), rebate ${s.rebateDisputed?'disputed':'clean'}, avg feedback ${s.avgRating}/5. Register items: ${s.regDescriptions.join('; ')||'none'}. Feedback comments: ${s.feedbackComments.join(' | ')||'none'}.`).join('\n');
+    const prompt = `You are a cross-contract pattern-detection agent for a procurement team. Given this per-contract summary across a portfolio, identify 2-4 genuine recurring patterns or themes across MULTIPLE contracts (not single-contract observations) — e.g. a repeated clause/issue type causing overdue items on more than one supplier, a common complaint theme in feedback, or clustered rebate disputes. If there's truly nothing that recurs across contracts, say so plainly rather than inventing a pattern. Write 2-4 short bullet points, each naming which contracts are involved.\n\n${lines}`;
+    try{
+      const text = await askAI(prompt);
+      out.innerHTML = `<div style="border-top:1px solid var(--line);padding-top:8px;">${esc(text).replace(/\n/g,'<br>')}</div>`;
+    }catch(e){ out.innerHTML = `<span style="color:var(--red);">${esc(e.message)}</span>`; }
+    btn.disabled = false; btn.textContent = 'Scan for patterns';
+  });
 }
 function renderGovernance(){
   const d = computeGovernanceData();
@@ -1946,6 +2353,9 @@ function renderGovernance(){
     <div class="flex-between"><h3 style="margin:0;">Executive summary</h3><button class="btn small gold" id="btnGovSummary">AI draft executive summary</button></div>
     <textarea id="govSummary" style="min-height:90px;margin-top:8px;" placeholder="Click 'AI draft executive summary' or write your own.">${esc(STATE.governanceSummary)}</textarea>
   </div>
+
+  ${renderWatchAgent()}
+  ${renderPatternAgent()}
 
   <div class="grid2">
     <div class="card">
@@ -2085,6 +2495,7 @@ function wireScreen(screen){
   if(screen==='coverage') wireCoverage();
   if(screen==='scorecard') wireScorecard();
   if(screen==='governance') wireGovernance();
+  if(screen==='brief') wireBrief();
   if(screen==='settings') wireSettings();
 }
 
@@ -2221,8 +2632,7 @@ function wireTiering(){
         status.textContent = 'Analyzing and auto-scoring contract...';
         const { final } = await chooseAndRunDocumentReview();
         STATE.tieringSingle = final.suggestedTier;
-        STATE.qbr.supplier = STATE.activeContract.name;
-        STATE.qbr.contractId = STATE.activeContract.id;
+        openOrCreateQbrFor(STATE.activeContract.name, STATE.activeContract.id);
         if(STATE.ai.mode==='sandbox' && STATE.ai.geminiKey && !SANDBOX_REASSURANCE_SHOWN){
           SANDBOX_REASSURANCE_SHOWN = true;
           SANDBOX_REASSURANCE_MSG = '🔒 Confirmed: Sandbox mode was honored for this upload — this document was processed entirely locally using offline heuristics. No content was sent to Gemini, even though a Gemini key is stored in Settings.';
@@ -2310,6 +2720,7 @@ function qbrStatusChartData(q){
   ].filter(d=>d.value>0);
 }
 function wireQBR(){
+  wireQbrPicker();
   const q = STATE.qbr;
   if((q.kpis.length+q.slas.length)>0){
     mountChart('chartQbrStatus', 380, 150, (ctx,w,h)=> drawDonutChart(ctx,w,h, qbrStatusChartData(q)));
@@ -2318,7 +2729,7 @@ function wireQBR(){
   if(stdBtn) stdBtn.addEventListener('click',()=>{
     const fb = getFeedbackForSupplier(q.supplier);
     fb.matches.forEach(f=>{ f.subject = q.supplier; });
-    saveState(); render();
+    saveQbr(); render();
   });
   const fbBtn = document.getElementById('btnQbrAddFeedback');
   if(fbBtn) fbBtn.addEventListener('click',()=>{
@@ -2326,16 +2737,16 @@ function wireQBR(){
     const rating = parseInt(document.getElementById('qbrFbRating').value)||3;
     const comment = document.getElementById('qbrFbComment').value;
     STATE.coverage.feedback.push({id:uid(), subject:q.supplier, stakeholder, date:new Date().toISOString().slice(0,10), rating, comment});
-    saveState(); render();
+    saveQbr(); render();
   });
-  document.getElementById('qbrSupplier').addEventListener('input',e=>{ q.supplier=e.target.value; saveState(); });
-  document.getElementById('qbrPeriod').addEventListener('input',e=>{ q.period=e.target.value; saveState(); });
-  document.getElementById('qbrRebates').addEventListener('input',e=>{ q.rebates=e.target.value; saveState(); });
-  document.getElementById('qbrRisks').addEventListener('input',e=>{ q.risks=e.target.value; saveState(); });
-  document.getElementById('qbrActions').addEventListener('input',e=>{ q.actions=e.target.value; saveState(); });
-  document.getElementById('qbrNarrative').addEventListener('input',e=>{ q.narrative=e.target.value; saveState(); });
+  document.getElementById('qbrSupplier').addEventListener('input',e=>{ q.supplier=e.target.value; saveQbr(); });
+  document.getElementById('qbrPeriod').addEventListener('input',e=>{ q.period=e.target.value; saveQbr(); });
+  document.getElementById('qbrRebates').addEventListener('input',e=>{ q.rebates=e.target.value; saveQbr(); });
+  document.getElementById('qbrRisks').addEventListener('input',e=>{ q.risks=e.target.value; saveQbr(); });
+  document.getElementById('qbrActions').addEventListener('input',e=>{ q.actions=e.target.value; saveQbr(); });
+  document.getElementById('qbrNarrative').addEventListener('input',e=>{ q.narrative=e.target.value; saveQbr(); });
   const recsEl = document.getElementById('qbrRecommendations');
-  if(recsEl) recsEl.addEventListener('input', e=>{ q.recommendations=e.target.value; saveState(); });
+  if(recsEl) recsEl.addEventListener('input', e=>{ q.recommendations=e.target.value; saveQbr(); });
 
   const qbrAiBtn = document.getElementById('btnQbrAiExtract');
   if(qbrAiBtn){
@@ -2349,7 +2760,7 @@ function wireQBR(){
         if(!final.kpis.length && !final.slas.length){
           alert('No KPI/SLA commitments detected in contract text.');
         }else{
-          saveState();
+          saveQbr();
           render();
         }
       }catch(err){
@@ -2360,10 +2771,10 @@ function wireQBR(){
   }
 
   document.getElementById('btnAddKpi').addEventListener('click',()=>{
-    q.kpis.push({id:uid(),name:'',target:'',actual:'',status:'On track'}); saveState(); render();
+    q.kpis.push({id:uid(),name:'',target:'',actual:'',status:'On track'}); saveQbr(); render();
   });
   document.getElementById('btnAddSla').addEventListener('click',()=>{
-    q.slas.push({id:uid(),name:'',target:'',actual:'',status:'On track'}); saveState(); render();
+    q.slas.push({id:uid(),name:'',target:'',actual:'',status:'On track'}); saveQbr(); render();
   });
   document.querySelectorAll('tr[data-line]').forEach(tr=>{
     const id = tr.dataset.line, kind = tr.dataset.kind;
@@ -2372,7 +2783,7 @@ function wireQBR(){
         const list = kind==='kpi'?q.kpis:q.slas;
         const item = list.find(x=>x.id===id);
         item[e.target.dataset.f] = e.target.value;
-        saveState(); render();
+        saveQbr(); render();
       });
     });
   });
@@ -2381,7 +2792,7 @@ function wireQBR(){
       const kind = b.dataset.kind;
       if(kind==='kpi') q.kpis = q.kpis.filter(x=>x.id!==b.dataset.delline);
       else q.slas = q.slas.filter(x=>x.id!==b.dataset.delline);
-      saveState(); render();
+      saveQbr(); render();
     });
   });
   const recsBtn = document.getElementById('btnQbrRecs');
@@ -2394,7 +2805,7 @@ function wireQBR(){
     const prompt = `Write a short (80-100 word) recommendations paragraph for a QBR with supplier "${q.supplier}", based on this analysis: ${heuristic.join(' ')} Write plain prose directed at the account owner, prioritised by urgency.`;
     try{
       const text = await askAI(prompt);
-      q.recommendations = text; saveState(); render();
+      q.recommendations = text; saveQbr(); render();
     }catch(e){ alert(e.message); }
     recsBtn.disabled = false; recsBtn.textContent = 'AI draft recommendations';
   });
@@ -2409,7 +2820,7 @@ function wireQBR(){
     const prompt = `Draft a concise QBR narrative for supplier "${q.supplier}" for period "${q.period}". KPIs: ${kpiSum||'none logged'}. SLAs: ${slaSum||'none logged'}. Rebates: ${q.rebates||'none noted'}. Risks: ${q.risks||'none noted'}. Actions: ${q.actions||'none noted'}. ${feedbackSum}. Write 4 short paragraphs: performance summary, risk/rebate position, recommended actions, relationship outlook — ground the relationship outlook paragraph specifically in the stakeholder feedback given, not just KPI/SLA performance.`;
     try{
       const text = await askAI(prompt);
-      q.narrative = text; saveState(); render();
+      q.narrative = text; saveQbr(); render();
     }catch(e){ alert(e.message); }
   });
   document.getElementById('btnQbrExport').addEventListener('click',()=>{
@@ -2632,7 +3043,7 @@ function extractTargetNumber(text){
 }
 function addCandidateToQbr(text){
   STATE.qbr.slas.push({id:uid(), name:text, target:extractTargetNumber(text), actual:'', status:'On track'});
-  saveState();
+  saveQbr();
 }
 function heuristicTierFromText(text){
   const lower = text.toLowerCase();
@@ -2932,6 +3343,8 @@ function tierChartData(buckets){
   return buckets.map(b=>({label:b.label.replace(/[🥇🥈🥉]/g,'').trim(), value:b.count, color:colorMap[b.cls]||'#a8792e'}));
 }
 function wireGovernance(){
+  wireWatchAgent();
+  wirePatternAgent();
   const d = computeGovernanceData();
   mountChart('chartTierMix', 420, 180, (ctx,w,h)=> drawDonutChart(ctx,w,h, tierChartData(d.buckets)));
   mountChart('chartMaturityRadar', 420, 220, (ctx,w,h)=> drawRadarChart(ctx,w,h, d.dimAvg.map(x=>({label:x.dim, value:x.avg}))));
@@ -3122,10 +3535,14 @@ const TOUR = [
   {screen:'register', text:'If you uploaded a contract on Step 0, scroll down to "Contract Analysis & Staging" — candidate clauses staged for review, plus a full "AI document review" panel. Long documents show a chunk-count and cost estimate first, with a choice between a full chunked review (whole document) or a quick first-section-only pass.'},
   {screen:'rebates', text:'Rebate tiers for two of the three suppliers — accrued entitlement is calculated live from spend × rate, with a bar chart. Meridian Cloud Hosting is marked Disputed on purpose — watch what that does on Governance.'},
   {screen:'qbr', text:'A live QBR for Global Logistics Co (our Strategic/Gold demo supplier) — KPIs, SLAs, and a breached SLA. Notice the Recommendations panel and the KPI/SLA status chart wrote themselves from the obligations and rebates you just saw.'},
+  {screen:'qbr', text:'This demo actually seeded two QBRs — expand "QBRs on file" above to see Meridian Cloud Hosting\'s too, with its own breached SLA and disputed rebate. Multiple suppliers each keep their own QBR record; nothing gets overwritten switching between them.'},
   {screen:'qbr', text:'Scroll down: stakeholder feedback for this supplier is pulled in automatically from the Coverage tab, matched by name — and it feeds the AI-drafted narrative too.'},
   {screen:'coverage', text:'Category spend coverage (two categories are deliberately under 50% — white space), plus the stakeholder feedback and collaboration logs behind the QBR screen you just saw.'},
+  {screen:'brief', text:'Contract Brief: a two-page handover document for a single contract — tiering, key dates, rebate standing, top risks and recent feedback pulled together automatically. This is what a procurement manager hands the contract manager taking over, distinct from the periodic QBR.'},
   {screen:'scorecard', text:'Maturity scored across 6 dimensions with a real (uneven) spread, not all 3s — feeds the radar chart on Governance next.'},
   {screen:'governance', text:'Everything lands here: tier mix donut, maturity radar, and Risks / To-do / Recommendations computed live from the disputed rebate, white-space categories, overdue items and low feedback you just saw. Export it to Word or PowerPoint with the charts embedded.'},
+  {screen:'governance', text:'🔔 Renewal & Obligation Watch above the charts scans every open register item across the whole portfolio and flags anything overdue or due soon — proactively, not just as a badge on a tab you have to remember to check. Try "AI prioritise" for a directive action brief.'},
+  {screen:'governance', text:'🔍 Cross-Contract Pattern Scan below it looks across ALL contracts at once for recurring themes a single-contract view can\'t show — try it on this demo\'s two suppliers.'},
   {screen:'settings', text:'Connect Claude or Gemini here for live AI drafting and higher-fidelity document analysis, or stay in Sandbox mode to keep everything — including full document review — fully local, no network calls at all, verified end to end. Confidential contract? Use Sandbox. That\u2019s the tour — explore freely, or reset all data in Settings to start clean.'}
 ];
 let ABOUT_STEP = 0;
@@ -3199,28 +3616,46 @@ function loadDemoData(){
       {id:uid(),supplier:'Meridian Cloud Hosting',type:'Innovation',description:'Pilot AI-based auto-scaling to reduce compute spend.',status:'Idea'}
     ]
   };
-  STATE.qbr = {
-    supplier:'Global Logistics Co', period:'Q3 FY26',
-    kpis:[
-      {id:uid(),name:'On-time delivery',target:'98%',actual:'95%',status:'At risk'},
-      {id:uid(),name:'Damage / defect rate',target:'<1%',actual:'0.6%',status:'On track'}
-    ],
-    slas:[
-      {id:uid(),name:'Incident response time',target:'4 hours',actual:'6 hours',status:'Breached'},
-      {id:uid(),name:'Tracking system uptime',target:'99.5%',actual:'99.7%',status:'On track'}
-    ],
-    rebates:'Tier 2 volume rebate tracking at 2% — see Rebates tab for live accrual.',
-    risks:'Fuel surcharge pass-through communicated late last cycle; single-source risk on the Northeast lane.',
-    actions:'Agree 30-day advance notice for surcharge changes; scope a backup carrier for the Northeast lane.',
-    narrative:'', recommendations:''
-  };
+  const glcQbrId = uid(), mchQbrId = uid();
+  STATE.qbrs = [
+    {
+      id: glcQbrId, supplier:'Global Logistics Co', contractId:'', period:'Q3 FY26',
+      kpis:[
+        {id:uid(),name:'On-time delivery',target:'98%',actual:'95%',status:'At risk'},
+        {id:uid(),name:'Damage / defect rate',target:'<1%',actual:'0.6%',status:'On track'}
+      ],
+      slas:[
+        {id:uid(),name:'Incident response time',target:'4 hours',actual:'6 hours',status:'Breached'},
+        {id:uid(),name:'Tracking system uptime',target:'99.5%',actual:'99.7%',status:'On track'}
+      ],
+      rebates:'Tier 2 volume rebate tracking at 2% — see Rebates tab for live accrual.',
+      risks:'Fuel surcharge pass-through communicated late last cycle; single-source risk on the Northeast lane.',
+      actions:'Agree 30-day advance notice for surcharge changes; scope a backup carrier for the Northeast lane.',
+      narrative:'', recommendations:''
+    },
+    {
+      id: mchQbrId, supplier:'Meridian Cloud Hosting', contractId:'', period:'Q3 FY26',
+      kpis:[
+        {id:uid(),name:'Support ticket resolution',target:'<8 hours',actual:'11 hours',status:'At risk'}
+      ],
+      slas:[
+        {id:uid(),name:'System uptime',target:'99.9%',actual:'99.6%',status:'Breached'}
+      ],
+      rebates:'Volume rebate marked Disputed this cycle — see Rebates tab.',
+      risks:'Two uptime dips this quarter; support response slower than contracted.',
+      actions:'Escalate the disputed rebate with the account team; request a service-improvement plan.',
+      narrative:'', recommendations:''
+    }
+  ];
+  STATE.qbr = JSON.parse(JSON.stringify(STATE.qbrs[0]));
+  STATE.qbrOpenId = glcQbrId;
   STATE.scorecard = {d1:4,d2:3,d3:3,d4:2,d5:4,d6:3,d7:2,d8:2,d9:4,d10:3,d11:4,d12:3,d13:3,d14:2,d15:3};
   saveState();
 }
 function hasNonDemoData(){
   return STATE.tieringBulk.length>0 || STATE.register.length>0 || STATE.rebates.length>0 ||
     STATE.coverage.categories.length>0 || STATE.coverage.feedback.length>0 || STATE.coverage.collaboration.length>0 ||
-    !!STATE.qbr.supplier || Object.keys(STATE.scorecard).length>0;
+    !!STATE.qbr.supplier || STATE.qbrs.length>0 || Object.keys(STATE.scorecard).length>0;
 }
 function startDemoTour(){
   if(hasNonDemoData()){
