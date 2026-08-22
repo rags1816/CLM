@@ -155,7 +155,7 @@
 
 /* ---------- constants ---------- */
 /* ---------- version (single source of truth — bump this, nothing else) ---------- */
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.7.1';
 
 const SCREENS = [
   {id:'about', label:'About'},
@@ -228,8 +228,8 @@ function tierBucketCounts(bulk){
 const GUIDE_TIPS = {
   about:['This is the front door — the pitch, the framework at a glance, and where to start.','Head to Settings first if you want AI drafting (Claude/Gemini) rather than Sandbox mode.','See the "offline vs. internet" card below for what needs a connection.','Use the ‹ Previous / Next › chevrons to step through Sections 0–7 one at a time.'],
   intake:['This is the no-document path: enter a contract summary directly instead of uploading the signed contract itself — this app is not meant to be your contract repository.','Optional AI step at the top: describe the contract in plain English and "Suggest with AI" pre-fills tier scores, obligations, SLAs and rebate terms below — you review and edit every field before anything is created.','One submission seeds Tiering, the Register, and Rebates in a single pass — review and refine each on its own tab afterwards.','Obligations/SLAs/KPIs — one per line; a due date after each line in parentheses is picked up automatically, e.g. "Insurance renewal (2027-01-15)".','Leave the rebate fields blank if this contract has no rebate — nothing is created if threshold/rate are both empty.'],
-  tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs.','The bulk table also has optional UNSPSC/CPV code fields — manual entry only, no lookup or validation.','Uploading a confidential contract? Check the badge above the upload box: Sandbox keeps it fully local (offline heuristics); Claude/Gemini sends it out for a higher-fidelity AI read. Switch modes in ⚙ Settings first if you need to.'],
-  framework:['The full 0–7 framework brief, plus benchmarking references (CIPS, Hackett, WorldCC).','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.','If a contract is active (uploaded on Tiering), the summary is grounded in a full-document AI review of it, not just your org profile fields — long documents offer a quick vs. full review choice with a cost estimate first.'],
+  tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs. It now also adds/updates this contract\'s row in the bulk table below automatically, so it shows up on the heatmap without a manual second step.','The bulk table also has optional UNSPSC/CPV code fields — manual entry only, no lookup or validation.','Uploading a confidential contract? Check the badge above the upload box: Sandbox keeps it fully local (offline heuristics); Claude/Gemini sends it out for a higher-fidelity AI read. Switch modes in ⚙ Settings first if you need to.'],
+  framework:['The full 0–7 framework brief, plus benchmarking references (CIPS, Hackett, WorldCC).','"+ Add starter" buttons now require picking a target contract first — starter content goes to that contract\'s Register/QBR/Rebates record specifically, never to whichever one happens to be open elsewhere.','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.','If a contract is active (uploaded on Tiering), the summary is grounded in a full-document AI review of it, not just your org profile fields — long documents offer a quick vs. full review choice with a cost estimate first.'],
   qbr:['This screen holds many QBRs, one per supplier/period — open the picker at the top to switch between them or start a new one.','Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.','If a contract is active, "AI Extract KPIs/SLAs" pulls them straight from it — offers the same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract KPIs/SLAs" would use.','Governance now rolls up risk across every saved QBR, not just the one currently open.'],
   rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.','If a contract is active, "AI Extract Rebates" pulls rebate tiers straight from it — same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract Rebates" would use.'],
   register:['One register for obligations, SLAs, and change orders — filter by type. Status auto-flags overdue items by due date.','Upload the contract once on the 0 · Tiering tab (Step 0) — this tab reflects it automatically under "Contract Analysis & Staging," with candidate obligation/SLA clauses staged for your review.','The "AI document review" panel below runs a full structured review of the active contract — long documents (over ~6,000 characters) show a chunk-count and cost estimate first, with a choice between a full chunked review (covers the whole document) or a quick first-section-only pass.','Its suggested tier is sourced from the same cached AI document review Tiering uses — no separate, possibly-disagreeing estimate.'],
@@ -330,17 +330,19 @@ const FRAMEWORK_QUICKADD = [
     'Transition services checklist sign-off'
   ]}
 ];
-function applyQuickAdd(spec){
+function applyQuickAdd(spec, contractName){
   if(spec.action==='obligations'){
-    spec.rows.forEach(r=> STATE.register.push({id:uid(), type:'Obligation', contract:'', description:r, owner:'', dueDate:'', recurrence:'One-off', status:'Open'}));
+    spec.rows.forEach(r=> STATE.register.push({id:uid(), type:'Obligation', contract:contractName||'', description:r, owner:'', dueDate:'', recurrence:'One-off', status:'Open'}));
   }else if(spec.action==='changeorders'){
-    spec.rows.forEach(r=> STATE.register.push({id:uid(), type:'Change Order', contract:'', description:r, owner:'', dueDate:'', recurrence:'One-off', status:'Open'}));
+    spec.rows.forEach(r=> STATE.register.push({id:uid(), type:'Change Order', contract:contractName||'', description:r, owner:'', dueDate:'', recurrence:'One-off', status:'Open'}));
   }else if(spec.action==='kpis'){
+    if(contractName) openOrCreateQbrFor(contractName);
     spec.rows.forEach(r=> STATE.qbr.kpis.push({id:uid(), name:r.name, target:r.target, actual:'', status:'On track'}));
   }else if(spec.action==='slas'){
+    if(contractName) openOrCreateQbrFor(contractName);
     spec.rows.forEach(r=> STATE.qbr.slas.push({id:uid(), name:r.name, target:r.target, actual:'', status:'On track'}));
   }else if(spec.action==='rebates'){
-    spec.rows.forEach(r=> STATE.rebates.push({id:uid(), contractName:r.contractName||'', tierName:r.tierName, threshold:r.threshold, ratePct:r.ratePct, spendToDate:0, status:'Open'}));
+    spec.rows.forEach(r=> STATE.rebates.push({id:uid(), contractName:contractName||r.contractName||'', tierName:r.tierName, threshold:r.threshold, ratePct:r.ratePct, spendToDate:0, status:'Open'}));
   }
   saveQbr();
 }
@@ -1032,7 +1034,7 @@ function renderAbout(){
   </div>
   <div class="card">
     <h2>What's new</h2>
-    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.7.0 — a multi-step AI intake agent on Contract Summary Intake (describe a contract in plain English, review the AI-suggested tier/obligations/SLAs/rebate terms, then commit), and a Cross-Contract Pattern Scan on Governance that looks for recurring themes across the whole portfolio at once, alongside v2.6.0's Multi-QBR, Contract Brief, and Renewal & Obligation Watch agent.</p>
+    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.7.1 — fixed two entry-point inconsistencies: uploading a document at 0 · Tiering now auto-creates/updates its portfolio-table row (previously only Contract Intake did this in one step), and Framework's "+ Add starter" buttons now require picking a target contract before adding anything, instead of silently writing to whichever QBR happened to be open or leaving Register items with no contract link.</p>
   </div>`;
 }
 
@@ -1313,6 +1315,8 @@ function renderBulkRow(row){
 /* ========== FRAMEWORK ========== */
 function renderFramework(){
   const fw = STATE.framework || {industry:'', spend:'', maturity:'Ad hoc', summaryText:''};
+  const contractNames = [...new Set(STATE.tieringBulk.map(r=>r.name).filter(Boolean))];
+  if(FW_TARGET_CONTRACT && !contractNames.includes(FW_TARGET_CONTRACT)) FW_TARGET_CONTRACT = '';
   return `
   <h2>Framework Brief · Sections 0–7</h2>
   <div class="card">
@@ -1330,11 +1334,21 @@ function renderFramework(){
     </div>
     <div id="fwSummaryOut">${fw.summaryText ? `<div class="card" style="white-space:pre-wrap;font-size:13.5px;">${esc(fw.summaryText)}</div>` : ''}</div>
   </div>
+  <div class="card">
+    <div class="field" style="max-width:360px;">
+      <label>Target contract for "+ Add starter" buttons below</label>
+      <select id="fwTargetContract">
+        <option value="">— Select a contract —</option>
+        ${contractNames.map(n=>`<option ${n===FW_TARGET_CONTRACT?'selected':''}>${esc(n)}</option>`).join('')}
+      </select>
+    </div>
+    <p class="small muted">Starter obligations, KPIs, SLAs and rebate tiers below are added to <b>this contract's</b> Register/QBR/Rebates record specifically — not whichever one happens to be open elsewhere. ${contractNames.length ? '' : 'Add a contract on 0 · Tiering or Contract Intake first to enable these buttons.'}</p>
+  </div>
   <div class="card mdbody" id="fwBody">${(function(){
     let html = mdToHtmlClean(FRAMEWORK_MD);
     FRAMEWORK_QUICKADD.forEach((spec,i)=>{
       const heading = `<h2>${spec.match}</h2>`;
-      const qa = `<h2>${spec.match}</h2><div class="row" style="margin:2px 0 10px;align-items:center;"><button class="btn small gold" data-qaclick="${i}">${esc(spec.label)}</button><span class="small muted" id="qaStatus${i}"></span></div>`;
+      const qa = `<h2>${spec.match}</h2><div class="row" style="margin:2px 0 10px;align-items:center;"><button class="btn small gold" data-qaclick="${i}" ${FW_TARGET_CONTRACT?'':'disabled'}>${esc(spec.label)}</button><span class="small muted" id="qaStatus${i}"></span></div>`;
       html = html.replace(heading, qa);
     });
     return html;
@@ -1386,6 +1400,22 @@ function openOrCreateQbrFor(supplier, contractId){
   const existing = STATE.qbrs.find(x=>normalizeSupplierName(x.supplier)===norm);
   if(existing) openQbr(existing.id);
   else openNewQbr({supplier, contractId});
+}
+// Upserts a tieringBulk row for a named contract -- creates one if none exists (matched by
+// normalized name), or refreshes the axis scores on the existing one if it does. Used so every
+// "add a contract" entry point (Contract Intake, Tiering document-upload) produces the same
+// downstream shape: a row in the portfolio table/heatmap, not just an activeContract + QBR.
+function upsertTieringBulkRow(name, scores){
+  if(!name) return;
+  const norm = normalizeSupplierName(name);
+  const idx = STATE.tieringBulk.findIndex(r=>normalizeSupplierName(r.name)===norm);
+  if(idx>=0){
+    STATE.tieringBulk[idx] = Object.assign({}, STATE.tieringBulk[idx], {
+      value: scores.value, risk: scores.risk, criticality: scores.criticality, impact: scores.impact
+    });
+  }else{
+    STATE.tieringBulk.push({id:uid(), name, value:scores.value, risk:scores.risk, criticality:scores.criticality, impact:scores.impact, unspscCode:'', cpvCode:''});
+  }
 }
 function normalizeSupplierName(s){
   return (s||'').toLowerCase().trim()
@@ -2632,6 +2662,7 @@ function wireTiering(){
         status.textContent = 'Analyzing and auto-scoring contract...';
         const { final } = await chooseAndRunDocumentReview();
         STATE.tieringSingle = final.suggestedTier;
+        upsertTieringBulkRow(STATE.activeContract.name, final.suggestedTier);
         openOrCreateQbrFor(STATE.activeContract.name, STATE.activeContract.id);
         if(STATE.ai.mode==='sandbox' && STATE.ai.geminiKey && !SANDBOX_REASSURANCE_SHOWN){
           SANDBOX_REASSURANCE_SHOWN = true;
@@ -2664,12 +2695,16 @@ function wireFramework(){
   document.getElementById('fwSpend').addEventListener('change', e=>{ fw.spend = e.target.value; saveState(); });
   document.getElementById('fwMaturity').addEventListener('change', e=>{ fw.maturity = e.target.value; saveState(); });
 
+  const targetSel = document.getElementById('fwTargetContract');
+  if(targetSel) targetSel.addEventListener('change', e=>{ FW_TARGET_CONTRACT = e.target.value; render(); });
+
   document.querySelectorAll('[data-qaclick]').forEach(btn=>{
     btn.addEventListener('click',()=>{
+      if(!FW_TARGET_CONTRACT) return;
       const idx = parseInt(btn.dataset.qaclick);
-      applyQuickAdd(FRAMEWORK_QUICKADD[idx]);
+      applyQuickAdd(FRAMEWORK_QUICKADD[idx], FW_TARGET_CONTRACT);
       const status = document.getElementById('qaStatus'+idx);
-      if(status) status.textContent = ' Added ✓';
+      if(status) status.textContent = ' Added ✓ — '+FW_TARGET_CONTRACT;
       btn.disabled = true;
     });
   });
@@ -2978,7 +3013,7 @@ function wireRegister(){
   if(addTierBtn) addTierBtn.addEventListener('click',()=>{
     const cachedForAdd = (STATE.activeContract && STATE.activeContract.text) ? getCachedReview() : null;
     const tierToAdd = cachedForAdd ? cachedForAdd.final.suggestedTier : SUGGESTED_TIER;
-    STATE.tieringBulk.push({id:uid(), name: IMPORT_FILE_NAME||'Imported contract', ...tierToAdd});
+    upsertTieringBulkRow(IMPORT_FILE_NAME||'Imported contract', tierToAdd);
     saveState();
     addTierBtn.textContent = 'Added ✓'; addTierBtn.disabled = true;
   });
@@ -3530,7 +3565,7 @@ const TOUR = [
   {screen:'tiering', text:'Section 0: score Value, Risk, Criticality and Impact — the tier updates live. Three demo suppliers are loaded below, spread across all three tiers.'},
   {screen:'tiering', text:'"Upload & Analyze Contract" above (not part of this demo\'s seed data) reads a real .docx/.pdf up to 350 pages, sets it as the active contract, and auto-scores it — that same active contract is then reused on QBR, Rebates and Register without re-uploading. The badge here shows which mode you\'re in: Sandbox keeps confidential contracts fully local (offline heuristics); Claude/Gemini sends content externally for higher-fidelity analysis — switch modes in ⚙ Settings based on how sensitive the document is.'},
   {screen:'tiering', text:'Scroll down: the bulk table auto-tiers every contract, and the heatmap plots them on Value × Risk. Try the naming-scheme dropdown to switch to 🥇🥈🥉 Gold/Silver/Bronze. Optional UNSPSC/CPV code fields on the right are manual entry only, no lookup.'},
-  {screen:'framework', text:'The full 0–7 framework brief lives here with CIPS / Hackett / WorldCC benchmarks. Each section has a "+ Add starter" button that seeds real screens — try one.'},
+  {screen:'framework', text:'The full 0–7 framework brief lives here with CIPS / Hackett / WorldCC benchmarks. Pick a target contract from the dropdown first — starter content from each "+ Add starter" button below goes specifically to that contract, not whichever one happens to be open elsewhere. Try one.'},
   {screen:'register', text:'Obligations, SLAs and change orders for all three suppliers — some overdue on purpose. The "contract" column is what links a row back to a QBR.'},
   {screen:'register', text:'If you uploaded a contract on Step 0, scroll down to "Contract Analysis & Staging" — candidate clauses staged for review, plus a full "AI document review" panel. Long documents show a chunk-count and cost estimate first, with a choice between a full chunked review (whole document) or a quick first-section-only pass.'},
   {screen:'rebates', text:'Rebate tiers for two of the three suppliers — accrued entitlement is calculated live from spend × rate, with a bar chart. Meridian Cloud Hosting is marked Disputed on purpose — watch what that does on Governance.'},
@@ -3546,6 +3581,7 @@ const TOUR = [
   {screen:'settings', text:'Connect Claude or Gemini here for live AI drafting and higher-fidelity document analysis, or stay in Sandbox mode to keep everything — including full document review — fully local, no network calls at all, verified end to end. Confidential contract? Use Sandbox. That\u2019s the tour — explore freely, or reset all data in Settings to start clean.'}
 ];
 let ABOUT_STEP = 0;
+let FW_TARGET_CONTRACT = '';
 let tourIndex = -1;
 let TOUR_POS = null;
 let TOUR_COLLAPSED = false;

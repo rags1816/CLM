@@ -153,7 +153,14 @@ standalone via typed summaries, rather than compete with it.
 
 ## Version history
 
-- **v2.7.0 [current]**: Multi-step AI intake agent on Contract Summary
+- **v2.7.1 [current]**: Fixed two entry-point sequencing inconsistencies
+  found during UAT review — Tiering document-upload now auto-creates/
+  updates its portfolio-table row instead of requiring a separate manual
+  step, and Framework's quick-add buttons now require a named target
+  contract instead of writing blind (blank Register contract fields,
+  KPIs/SLAs landing on whichever QBR happened to be open). See
+  `CHANGELOG.md` for the full breakdown.
+- **v2.7.0**: Multi-step AI intake agent on Contract Summary
   Intake (plain-English description → AI-suggested tier/obligations/SLAs/
   rebate terms → human review/commit), and a Cross-Contract Pattern Scan
   on Governance that looks for recurring themes across the whole

@@ -4,7 +4,35 @@ All notable changes to CLM Suite are recorded here, most recent first. For
 version history prior to this file's creation, see the **Version history**
 section of `METHODOLOGY.md`.
 
-## v2.7.0 [current] — Multi-step AI intake agent & cross-contract pattern scan
+## v2.7.1 [current] — Entry-point sequencing fixes
+
+Two inconsistencies identified during UAT review (multiple "add a
+contract" / "seed data" entry points producing different downstream
+shapes) were fixed:
+
+- **Tiering document-upload now auto-creates/updates its portfolio-table
+  row.** Previously, uploading a real contract document at 0 · Tiering
+  only set the single-contract score (`tieringSingle`) and opened/created
+  a QBR — it did not add a row to the bulk table, so the contract wouldn't
+  appear on the portfolio heatmap without a separate manual "+ Add bulk
+  row" step. Contract Intake already did this in one action; Tiering-
+  upload now matches it via a new `upsertTieringBulkRow()` helper, which
+  updates the existing row in place (matched by normalized name) on a
+  re-upload rather than creating a duplicate. Register's "Add to Tiering
+  table" button (for a document reviewed on the Register screen) now
+  routes through the same helper.
+- **Framework's "+ Add starter" quick-add now requires a named target
+  contract.** Previously, quick-added Register items (obligations, change
+  orders) were written with a blank `contract` field, and quick-added
+  KPIs/SLAs were written to whichever QBR happened to be open in the
+  editor at the time — regardless of which supplier that was. A new
+  "Target contract" dropdown on the Framework screen (sourced from the
+  Tiering bulk table) is now required before any quick-add button is
+  enabled; obligations/change orders/rebates carry that contract's name,
+  and KPIs/SLAs are routed to that specific contract's QBR record via
+  `openOrCreateQbrFor()`, not the currently-open one.
+
+## v2.7.0 — Multi-step AI intake agent & cross-contract pattern scan
 
 **Multi-step contract intake agent:**
 - Added a "0 · Describe it (AI-assisted)" step at the top of Contract
