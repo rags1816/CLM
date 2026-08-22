@@ -15,13 +15,36 @@ for consistency across the portfolio.
 - **Root** — only the live app file(s) (e.g. `index.html`), `README.md`,
   `METHODOLOGY.md`, `LICENSE`, `.gitignore`, `CHANGELOG.md` (if the repo
   tracks one). Keep root clean; nothing else belongs there.
-- **`docs/`** — user guides, admin guides, reference guides, and any
-  supporting documentation not needed to run the app.
+- **`docs/`** — user guides, admin guides, reference guides, QA/UAT test
+  materials, and any other supporting documentation not needed to run the
+  app.
 - **`archive/`** — superseded versions, old HTML/app snapshots, deprecated
   scripts. Kept for history, not deleted, unless confirmed genuinely
   redundant (e.g. a byte-identical duplicate).
 - **`tools/`** — utility/build scripts still actively used, if any (keep
   separate from `archive/`, which is for scripts no longer used).
+
+## QA / UAT test materials
+
+When a version introduces or fixes enough surface area to warrant a
+dedicated verification pass, two paired artifacts go in `docs/`:
+
+- **A UAT test script** (`.docx`, e.g. `CLM_Suite_v2.7.1_UAT_Test_Script.docx`)
+  — for human click-through testing, one test-case table per screen/
+  feature (steps / expected result / Pass-Fail / Notes), plus a Feedback
+  Summary table at the end. Name it `<AppName>_v<version>_UAT_Test_Script.docx`.
+- **A QA testing prompt** (`.md`, e.g. `QA_TESTING_PROMPT_v2.5-2.7.1.md`)
+  — the Claude Code-facing equivalent, written as a ready-to-paste prompt
+  that checks the same ground at the code level (static checks first,
+  then one section per feature/fix, then explicit regressions against the
+  last fully-reviewed version, ending with an instruction to report
+  PASS/FAIL/PARTIAL and NOT fix anything without going through the normal
+  diff-and-confirm workflow below). Name it to cover the version range
+  since the last one was written, e.g. `QA_TESTING_PROMPT_v<from>-<to>.md`.
+
+Superseded UAT docs/prompts move to `archive/` once their version range is
+fully tested and closed out, rather than accumulating indefinitely in
+`docs/`.
 
 ## Documentation files — what each one is for
 
