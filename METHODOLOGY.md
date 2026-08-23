@@ -188,7 +188,13 @@ standalone via typed summaries, rather than compete with it.
 
 ## Version history
 
-- **v2.8.0 [current]**: UAT feedback pass (31 review points). The
+- **v2.8.1 [current]**: Fixes from a full end-to-end QA pass on v2.8.0 —
+  Contract Intake's Sandbox-mode AI suggestion (was completely
+  non-functional out of the box), two silent-failure bugs in the offline
+  CSV template (a headerless file dropping its first contract; a binary
+  file creating garbage records), and 3 missed "Framework" → "Contract
+  Playbook" rename spots. See `CHANGELOG.md` for the full breakdown.
+- **v2.8.0**: UAT feedback pass (31 review points). The
   headline change: Contract Intake consolidated as the single creation
   surface, with four equally-supported paths (AI-assisted, manual,
   offline CSV template, document upload) converging on one shared

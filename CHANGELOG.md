@@ -4,7 +4,55 @@ All notable changes to CLM Suite are recorded here, most recent first. For
 version history prior to this file's creation, see the **Version history**
 section of `METHODOLOGY.md`.
 
-## v2.8.0 [current] — UAT feedback pass: architecture consolidation + 31 review points
+## v2.8.1 [current] — Fixes from the first full E2E QA pass
+
+The v2.8.0 UAT-driven pass got its own follow-up: a full end-to-end QA
+pass (`docs/QA_TESTING_PROMPT_v2.8.0_FULL.md`) against the live app found
+6 real issues, all fixed here.
+
+**Contract Intake — AI-assisted suggestion crashed in Sandbox mode:**
+- `sandboxAnswer()` always returns a fixed prose template regardless of
+  the prompt, but the intake handler always ran `JSON.parse()` on
+  whatever came back — so "Suggest with AI" was completely non-functional
+  in Sandbox, the default/recommended mode. Added `sandboxSuggestContract()`,
+  a proper offline heuristic (keyword-based tier scoring, category
+  guessing, name/obligation/SLA extraction from the description text) that
+  returns a real structured object without a network call, following the
+  same honest-about-being-a-heuristic pattern already used for bulk
+  contract scoring. Sandbox output is now visibly labelled as a rough
+  heuristic pass, distinct from a genuine AI read.
+- The category-guessing heuristic's first version had a real bug of its
+  own — matching a keyword derived from the category label as a bare
+  substring (`"it"` from `"IT & Technology"`) matched inside unrelated
+  words like `"with"`. Replaced with an explicit keyword list per
+  category, each matched with proper word boundaries.
+
+**Contract Intake — offline CSV template, two silent-failure bugs fixed:**
+- A file with no header row had its first real contract silently dropped
+  (the parser always sliced off row 0, assuming it was a header). The
+  parser now only treats row 0 as a header if it actually reads like
+  "Name" — a headerless file is parsed as all-data instead, with a
+  warning shown if no header was detected.
+- A non-CSV file (e.g. a binary file renamed `.csv`) previously created
+  garbage contract records with mojibake names, no error shown. The
+  parser now checks for a high ratio of control characters or the
+  Unicode replacement character — a tell-tale sign of binary content read
+  as text — and refuses to parse rather than manufacturing records from
+  noise. Individual rows with a suspiciously long or corrupted name are
+  also filtered out even from an otherwise-valid file.
+- The success/error message after a CSV import was being wiped
+  immediately by the `render()` call that runs right after — the status
+  div's default empty template replaced it before it was ever seen. Now
+  persisted in a small module-level variable that survives the re-render.
+
+**"Contract Playbook" rename — 3 missed spots:**
+- The About screen's "Read the framework brief" button, the Playbook
+  screen's own "Export framework brief to Word" button, and the exported
+  Word document's title ("CLM Framework Brief") were all missed by the
+  original rename pass's fixed search strings. All three now correctly
+  say "Contract Playbook".
+
+## v2.8.0 — UAT feedback pass: architecture consolidation + 31 review points
 
 A first full round of UAT (screen-by-screen, with the demo tour) surfaced
 31 distinct points, ranging from a real architectural gap to copy
