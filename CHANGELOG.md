@@ -4,7 +4,110 @@ All notable changes to CLM Suite are recorded here, most recent first. For
 version history prior to this file's creation, see the **Version history**
 section of `METHODOLOGY.md`.
 
-## v2.7.1 [current] — Entry-point sequencing fixes
+## v2.8.0 [current] — UAT feedback pass: architecture consolidation + 31 review points
+
+A first full round of UAT (screen-by-screen, with the demo tour) surfaced
+31 distinct points, ranging from a real architectural gap to copy
+clarifications. All 31 are addressed in this release.
+
+**Contract creation architecture — the biggest change in this release:**
+- **Contract Intake is now the single creation surface.** 0 · Tiering's
+  duplicate manual sliders are removed; that screen is now upload-only,
+  showing a read-only score for the active contract and linking to
+  Contract Intake for anything else. Every creation path — AI-assisted
+  description, manual entry, the new offline CSV template, and document
+  upload — now runs through one shared `createContractRecord()` function,
+  so all four produce an identical downstream shape (tieringBulk row +
+  Register items + optional rebate + QBR record) instead of subtly
+  different ones.
+- **Live tier preview before commit.** Contract Intake's tier sliders now
+  show a live-updating tier badge and score as you adjust them — nothing
+  is created until "Confirm & Create Contract Record" is clicked, so you
+  can trial different inputs freely first.
+- **Contract Duration and Category fields added** to Contract Intake
+  (start/end date pickers; category is a `<datalist>` — a dropdown of
+  common categories with free-text override).
+- **Offline CSV template — a 4th intake path.** Download a blank
+  template, fill it in offline (Excel, Sheets, anything that saves plain
+  CSV), re-upload it. Supports multiple contracts in one file; parsed
+  with a small hand-written CSV parser (handles quoted fields with
+  embedded commas) rather than pulling in a new charting/spreadsheet
+  library.
+- **0 · Tiering document-upload now auto-creates/updates its portfolio-
+  table row** (this was actually shipped in v2.7.1 — see below — and is
+  now the standard behavior of the consolidated architecture too).
+
+**Renames & navigation:**
+- **"Framework" renamed to "Contract Playbook"** everywhere user-facing
+  (nav label, screen heading, cross-references). Internal function/
+  variable names remain `framework`/`fw` — low-risk, code-only.
+- **Coverage & Feedback moved ahead of QBR in the nav** — QBR reads
+  stakeholder feedback from Coverage, so Coverage now correctly appears
+  before it (this was backwards since the screen was first added).
+- **QBR's Supplier field is now a dropdown** sourced from the Tiering
+  portfolio table (with an "Other" free-text fallback), instead of free
+  text that risked a typo creating an orphaned QBR.
+
+**Fixed a real duplicate-entry bug:**
+- **Contract Playbook's "+ Add starter" buttons are now genuinely
+  idempotent.** Previously, re-clicking the same button (e.g. after
+  navigating away and back) could silently add a second copy of the same
+  starter obligations/KPIs/SLAs/rebate tiers, because the only guard was
+  a UI-level disabled state that reset on re-render. Now checked against
+  existing Register/QBR/Rebate entries for that specific contract before
+  adding — re-clicking for the same contract adds nothing new; a
+  different contract still gets its own set.
+
+**Demo tour:**
+- **Resyncs when you navigate manually.** Previously, clicking a
+  different tab mid-tour (instead of using the tour's own Next/Prev)
+  left the tour card narrating stale content for whichever screen it
+  last pushed you to. `setScreen()` now snaps the tour to the nearest
+  matching step for wherever you actually navigate, without interfering
+  with the tour's own Prev/Next buttons.
+- **Reordered to match the corrected nav sequence** (Coverage before
+  QBR), and the Tiering/Intake/Playbook steps rewritten to reflect the
+  consolidated architecture above.
+
+**Clarity & source-of-data fixes (from UAT points that were "already
+correct behavior, just undocumented"):**
+- Rebates: empty-state copy no longer implies a document must be active
+  for manual entry (only "AI Extract Rebates" needs one); added a
+  one-line note on where table data actually comes from.
+- QBR: added a note stating the AI narrative and Word/PPT exports are
+  built from that QBR's own KPI/SLA/Risk/Action fields plus Coverage
+  feedback — and sharpened the "no active document" warning specifically
+  for Sandbox mode, since a template narrative with no source document is
+  meaningfully weaker than one grounded in real contract text.
+- Maturity Scorecard: added a note stating the assessment is entirely
+  manual (never AI-generated), one-time-per-cycle, and organisation-wide
+  rather than tied to a specific contract.
+- Register: added an explanation of why Change Order is a Type within
+  this register rather than its own screen, and clarified that clause
+  extraction detects obligation/SLA language only, not change-order
+  language.
+- Cross-Contract Pattern Scan: now states its scope explicitly (only
+  contracts on the portfolio table, with a live count).
+- Governance charts: tier-mix donut and maturity radar headings now state
+  their scope explicitly ("whole portfolio" / "organisation-wide") rather
+  than reading as if they could be per-contract.
+- Rebates bar chart: fixed label truncation on long contract/tier names
+  (added ellipsis truncation + widened the label column) and added a
+  subtitle clarifying the bars represent spend × rate, not raw spend.
+
+**New feature — Contract Brief QBR summary option:**
+- Added an opt-in (off by default) "Include the latest QBR's narrative"
+  checkbox on Contract Brief — useful for senior management briefing
+  (e.g. at renewal or during a crisis) without duplicating the KPI/SLA
+  tables the Brief already shows. Included in both the on-screen view and
+  the Word export when checked.
+
+**Configurability:**
+- Renewal & Obligation Watch Agent's urgent/upcoming day cutoffs (30/90
+  by default) are now user-editable inputs, persisted in state, instead
+  of hardcoded.
+
+## v2.7.1 — Entry-point sequencing fixes
 
 Two inconsistencies identified during UAT review (multiple "add a
 contract" / "seed data" entry points producing different downstream

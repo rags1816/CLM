@@ -39,8 +39,16 @@ dedicated verification pass, two paired artifacts go in `docs/`:
   then one section per feature/fix, then explicit regressions against the
   last fully-reviewed version, ending with an instruction to report
   PASS/FAIL/PARTIAL and NOT fix anything without going through the normal
-  diff-and-confirm workflow below). Name it to cover the version range
-  since the last one was written, e.g. `QA_TESTING_PROMPT_v<from>-<to>.md`.
+  diff-and-confirm workflow below). Two variants:
+  - **Delta**, covering only what changed since the last review: name it
+    `QA_TESTING_PROMPT_v<from>-<to>.md`.
+  - **Full**, a complete end-to-end walkthrough of the whole app
+    regardless of what changed recently — used after a big enough
+    architectural change (or simply periodically) that testing only the
+    delta risks missing something the delta-framing itself would hide:
+    name it `QA_TESTING_PROMPT_v<version>_FULL.md`. A Full prompt
+    supersedes every prior Delta prompt still in `docs/` — move those to
+    `archive/` once the Full pass is complete and closed out.
 
 Superseded UAT docs/prompts move to `archive/` once their version range is
 fully tested and closed out, rather than accumulating indefinitely in

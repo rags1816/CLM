@@ -8,25 +8,26 @@ rationale.
 
 ## What it does
 
-- **Document-Centric Workflow (0):** Upload a contract document (.docx or .pdf) at **Step 0 (Tiering)** to establish an active contract context. You can check "Append to active contract" to combine multiple files (e.g. Master Agreement + SLA schedules) under the same supplier context. The app instantly auto-scores the contract across four axes — Value, Risk, Criticality, Business Impact — and recommends a management tier, with support for standard or Gold/Silver/Bronze schemes.
-- **Contract Summary Intake:** A no-document alternative to Step 0 for anyone who doesn't want to (or can't) upload the actual signed contract. Type a summary directly — contract identity, tier inputs, obligations/SLAs, rebate terms — and one submission seeds Tiering, the Register, and Rebates in a single pass. An optional AI-assisted step accepts a plain-English description and pre-fills the whole form (tier scores, obligations, SLAs, rebate terms) for review before anything is committed.
-- **Framework:** The full Section 0–7 brief with CIPS / Hackett / WorldCC benchmarking references and AI-drafted summaries. Inputs on this screen are persisted automatically in local storage.
-- **Obligations/SLA Register:** Automatically stages candidate clauses and obligations parsed from the Step 0 active contract for review. Allows manually tracking status, owners, and due dates.
-- **QBR Builder:** Holds a collection of QBRs — one record per supplier/period, switchable via a picker — each extracting SLA/KPI parameters from its active contract via AI (or sandbox regex heuristics) and drafting performance narratives.
-- **Rebate Tracker:** Extracts spend volume tiers and rates directly from the active contract and calculates accrued entitlement live from spend inputs.
-- **Contract Brief:** A two-page, per-contract handover document — the summary a procurement manager hands to the contract manager taking over ownership. Auto-assembles tier standing, key dates, rebate status, top risks, recent feedback, and recommended next actions from data already on the other tabs; exports to Word.
-- **Maturity Assessment:** 15 questions across 6 dimensions, tracked over time.
-- **Governance Rollup:** Live CPO-facing rollup (donut tier mix, maturity radar, spend coverage, overdue obligations, risks, and recommendations) exportable to Word or PowerPoint, now including:
-  - **Renewal & Obligation Watch Agent** — proactively scans every open Register item across the whole portfolio for anything overdue or due soon, with an optional AI-prioritised action brief.
-  - **Cross-Contract Pattern Scan** — a single AI call looks across all contracts on file for recurring themes (repeated issue types, complaint patterns, clustered rebate disputes) that a single-contract view can't surface.
+- **Contract Intake:** The single place to create a contract record — four equally-supported paths, all producing the same downstream record (a tier score, Register items, an optional rebate tier, a QBR): describe it in plain English (AI-assisted, with a live tier-preview badge before you confirm anything), fill it in manually, download/fill/re-upload an offline CSV template (supports multiple contracts per file), or upload the real document.
+- **0 · Tiering:** Upload a contract document (.docx or .pdf) here to auto-score it across four axes — Value, Risk, Criticality, Business Impact — with support for standard or Gold/Silver/Bronze schemes; this also sets the active contract context used across QBR, Rebates, and Register. This screen is upload-only — for manual/AI/template entry, use Contract Intake. The portfolio table and Value×Risk heatmap here are the combined *output* of every intake path.
+- **Contract Playbook:** The full Section 0–7 brief with CIPS / Hackett / WorldCC benchmarking references and AI-drafted summaries. "+ Add starter" buttons seed Register/QBR/Rebates for a chosen target contract — idempotent, so re-clicking for the same contract won't create duplicates.
+- **Obligations/SLA/Change Order Register:** One register for all three types — automatically stages candidate clauses parsed from an active document for review, or add items directly via Contract Intake without a document. Change Orders live here (not a separate screen) so scope drift stays with the obligations/SLAs it affects.
+- **Rebate Tracker:** Manual entry, Contract Intake, the offline template, or AI-extraction from an active document — calculates accrued entitlement live from spend × rate.
+- **Coverage & Feedback:** Category spend coverage and stakeholder feedback — feeds into QBR (and appears before it in the nav, since QBR reads from it).
+- **QBR Builder:** Holds a collection of QBRs — one record per supplier/period, switchable via a picker, with the Supplier field itself a dropdown sourced from the tiered portfolio — each extracting SLA/KPI parameters from its active contract via AI (or sandbox regex heuristics) and drafting performance narratives.
+- **Contract Brief:** A two-page, per-contract handover document — the summary a procurement manager hands to the contract manager taking over ownership. Auto-assembles tier standing, key dates, rebate status, top risks, recent feedback, and recommended next actions; optionally includes the latest QBR's narrative for senior briefing (e.g. at renewal or during a crisis) without duplicating data; exports to Word.
+- **Maturity Assessment:** 15 questions across 6 dimensions, entirely manual and organisation-wide, tracked over time.
+- **Governance Rollup:** Live CPO-facing rollup (donut tier mix, maturity radar, spend coverage, overdue obligations, risks, and recommendations) exportable to Word or PowerPoint, including:
+  - **Renewal & Obligation Watch Agent** — proactively scans every open Register item across the whole portfolio for anything overdue or due soon (day cutoffs are user-configurable), with an optional AI-prioritised action brief.
+  - **Cross-Contract Pattern Scan** — a single AI call looks across all contracts on the portfolio table for recurring themes (repeated issue types, complaint patterns, clustered rebate disputes) that a single-contract view can't surface.
 
 ## Status
 
-v2.7.0. Active document-centric single-file app; known gaps documented in `ADMIN_GUIDE.md`. See `CHANGELOG.md` for version history.
+v2.8.0. Active document-centric single-file app; known gaps documented in `ADMIN_GUIDE.md`. See `CHANGELOG.md` for version history.
 
 ## Tech stack
 
-Single `index.html` file — no server, backend, or build step. AI assistance via user-supplied Claude or Gemini API key (dropdown select or custom names, stored in browser `localStorage`), with detailed API response error logs and an offline "Sandbox" mode as default fallback. Optional CDN-loaded libraries (`docx`, `pptxgenjs`, `mammoth`, `pdfjs-dist`) load on-demand for imports/exports.
+Single `index.html` file — no server, backend, or build step. AI assistance via user-supplied Claude or Gemini API key (dropdown select or custom names, stored in browser `localStorage`), with detailed API response error logs and an offline "Sandbox" mode as default fallback. Optional CDN-loaded libraries (`docx`, `pptxgenjs`, `mammoth`, `pdfjs-dist`) load on-demand for imports/exports. The offline contract-intake CSV template uses a small hand-written parser — no spreadsheet library dependency.
 
 ## How to run
 
