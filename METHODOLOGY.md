@@ -59,17 +59,38 @@ The weighted composite auto-assigns one of four tiers:
 | Transactional | Annual/exception-based review |
 | Routine / Leverage | Compliance-only, no active management |
 
-**Document-centric workflow:** Uploading a contract document at **Step 0 (Tiering)** pre-fills the four-axis model based on document content and sets a global active contract context. The app supports uploading multiple documents sequentially (appending their text under a combined title) to analyze entire contract packages (e.g. Master Agreement + SLA schedules) as one. This context then powers downstream AI extraction for QBR KPIs/SLAs, Rebate tiers, and staged Obligations automatically, reducing manual input and duplicate entries.
+**Contract creation — four equally-supported paths, one shared pipeline (v2.8+):**
+Rather than treating document upload as the primary path and everything
+else as a lesser alternative, v2.8 consolidated contract creation around
+Contract Intake as the single creation surface, with four ways in that
+all produce an identical downstream record (a tier score, Register items,
+an optional rebate tier, and a QBR) via one shared function:
+- **AI-assisted** — a plain-English description, converted to a
+  structured suggestion for review (see **Agentic layer** below)
+- **Manual entry** — the four-axis tier sliders with a live preview badge
+  that updates before anything is committed, plus category, dates,
+  obligations/SLAs, and rebate fields
+- **Offline template** — a downloadable CSV filled in outside the app
+  (no internet or in-app time required) and re-uploaded, supporting
+  multiple contracts per file
+- **Document upload** (at **0 · Tiering**) — the original path: uploading
+  a real .docx/.pdf pre-fills the four-axis model from document content,
+  sets a global active-contract context, and powers downstream AI
+  extraction for QBR KPIs/SLAs, Rebate tiers, and staged Obligations. The
+  app supports uploading multiple documents sequentially (appending their
+  text under a combined title) to analyze entire contract packages (e.g.
+  Master Agreement + SLA schedules) as one.
 
-**No-document intake path (v2.5+):** Recognising that this tool is
-deliberately *not* a contract repository or document store, Contract
-Summary Intake offers an equally-supported second entry point: a typed
-summary (contract identity, tier inputs, obligations/SLAs, rebate terms)
-that seeds the same downstream screens the document-upload path does,
-without ever requiring the signed contract text itself to be pasted in or
-stored. From v2.7, this path also accepts a plain-English description,
-which an AI step converts into the same structured suggestion for human
-review before anything is committed — see **Agentic layer** below.
+0 · Tiering itself is now upload-only — its former duplicate manual
+slider entry was removed in favour of Contract Intake being the one place
+to score, describe, or template-import a contract. The portfolio table on
+0 · Tiering is explicitly the *output* of all four paths combined (plus
+two lightweight, score-only quick-add options that don't create the full
+record), not a fifth creation method in its own right.
+
+None of the four paths require the signed contract text itself to be
+pasted in or stored — reinforcing that this tool is deliberately *not* a
+contract repository or document store.
 
 **Maturity model:** a separate 15-question, 6-dimension assessment (Foundation
 & Data, Obligations, KPIs & SLAs, Rebates, Change & Termination, QBR &
@@ -84,7 +105,21 @@ that a real CLM program runs concurrent, recurring reviews across a
 portfolio, not one review at a time. Governance's risk aggregation reads
 across the full collection, so a breach on any supplier's QBR — and any
 top-tier contract missing a QBR entirely — surfaces at the portfolio level
-regardless of which QBR record happens to be open at the time.
+regardless of which QBR record happens to be open at the time. From v2.8,
+the QBR's Supplier field is itself a dropdown sourced from the tiering
+portfolio, keeping every downstream reference to a contract name
+consistent rather than risking a free-text typo.
+
+**Section ordering reflects data dependency, not narrative convenience
+(v2.8+):** where one screen's output feeds another's input, the feeding
+screen appears first in the navigation — Contract Playbook (formerly
+"Framework") sits ahead of Register/Rebates/QBR because its quick-add
+seeds them; Coverage & Feedback sits ahead of QBR because QBR reads
+stakeholder feedback from it. This was tightened in v2.8 after UAT review
+found the original ordering had Coverage after QBR, backwards from how
+the data actually flows.
+
+
 
 ## Agentic layer (v2.6+)
 
@@ -153,7 +188,26 @@ standalone via typed summaries, rather than compete with it.
 
 ## Version history
 
-- **v2.7.1 [current]**: Fixed two entry-point sequencing inconsistencies
+- **v2.8.1 [current]**: Fixes from a full end-to-end QA pass on v2.8.0 —
+  Contract Intake's Sandbox-mode AI suggestion (was completely
+  non-functional out of the box), two silent-failure bugs in the offline
+  CSV template (a headerless file dropping its first contract; a binary
+  file creating garbage records), and 3 missed "Framework" → "Contract
+  Playbook" rename spots. See `CHANGELOG.md` for the full breakdown.
+- **v2.8.0**: UAT feedback pass (31 review points). The
+  headline change: Contract Intake consolidated as the single creation
+  surface, with four equally-supported paths (AI-assisted, manual,
+  offline CSV template, document upload) converging on one shared
+  creation function — 0 · Tiering's duplicate manual sliders removed in
+  favour of it. "Framework" renamed to "Contract Playbook"; Coverage &
+  Feedback moved ahead of QBR in the nav to match data dependency; QBR's
+  Supplier field is now a dropdown; fixed a real duplicate-entry bug on
+  Playbook quick-add; demo tour now resyncs on manual navigation; Watch
+  Agent day-cutoffs are now configurable; added an opt-in QBR-summary
+  option to Contract Brief; multiple source-of-data clarity fixes across
+  Rebates, QBR, and the Maturity Scorecard. See `CHANGELOG.md` for the
+  full breakdown.
+- **v2.7.1**: Fixed two entry-point sequencing inconsistencies
   found during UAT review — Tiering document-upload now auto-creates/
   updates its portfolio-table row instead of requiring a separate manual
   step, and Framework's quick-add buttons now require a named target

@@ -155,7 +155,7 @@
 
 /* ---------- constants ---------- */
 /* ---------- version (single source of truth — bump this, nothing else) ---------- */
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.8.1';
 
 const SCREENS = [
   {id:'about', label:'About'},
@@ -229,7 +229,7 @@ const GUIDE_TIPS = {
   about:['This is the front door — the pitch, the framework at a glance, and where to start.','Head to Settings first if you want AI drafting (Claude/Gemini) rather than Sandbox mode.','See the "offline vs. internet" card below for what needs a connection.','Use the ‹ Previous / Next › chevrons to step through Sections 0–7 one at a time.'],
   intake:['This is the no-document path: enter a contract summary directly instead of uploading the signed contract itself — this app is not meant to be your contract repository.','Optional AI step at the top: describe the contract in plain English and "Suggest with AI" pre-fills tier scores, obligations, SLAs and rebate terms below — you review and edit every field before anything is created.','One submission seeds Tiering, the Register, and Rebates in a single pass — review and refine each on its own tab afterwards.','Obligations/SLAs/KPIs — one per line; a due date after each line in parentheses is picked up automatically, e.g. "Insurance renewal (2027-01-15)".','Leave the rebate fields blank if this contract has no rebate — nothing is created if threshold/rate are both empty.'],
   tiering:['Score one contract with the sliders, or paste several into the bulk table to test auto-tiering.','Weights: Value & Risk 30% each, Criticality & Impact 20% each — tune the logic to your risk appetite in code if needed.','"AI score contract list" works even in Sandbox mode (offline heuristic) — no connection required.','Upload a .docx/.pdf under "Upload & Analyze Contract" (up to 350 pages) to set it as the active contract — it\'s reused automatically across QBR, Rebates, and Register, no separate upload needed on those tabs. It now also adds/updates this contract\'s row in the bulk table below automatically, so it shows up on the heatmap without a manual second step.','The bulk table also has optional UNSPSC/CPV code fields — manual entry only, no lookup or validation.','Uploading a confidential contract? Check the badge above the upload box: Sandbox keeps it fully local (offline heuristics); Claude/Gemini sends it out for a higher-fidelity AI read. Switch modes in ⚙ Settings first if you need to.'],
-  framework:['The full 0–7 framework brief, plus benchmarking references (CIPS, Hackett, WorldCC).','"+ Add starter" buttons now require picking a target contract first — starter content goes to that contract\'s Register/QBR/Rebates record specifically, never to whichever one happens to be open elsewhere.','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.','If a contract is active (uploaded on Tiering), the summary is grounded in a full-document AI review of it, not just your org profile fields — long documents offer a quick vs. full review choice with a cost estimate first.'],
+  framework:['The full 0–7 Contract Playbook, plus benchmarking references (CIPS, Hackett, WorldCC).','"+ Add starter" buttons now require picking a target contract first — starter content goes to that contract\'s Register/QBR/Rebates record specifically, never to whichever one happens to be open elsewhere.','Use "AI draft executive summary" to tailor it to your org profile — works offline in Sandbox mode too.','Word export needs internet once per session to load the library; falls back to a plain .doc file if blocked.','If a contract is active (uploaded on Tiering), the summary is grounded in a full-document AI review of it, not just your org profile fields — long documents offer a quick vs. full review choice with a cost estimate first.'],
   qbr:['This screen holds many QBRs, one per supplier/period — open the picker at the top to switch between them or start a new one.','Fill supplier, period, KPIs and SLAs — then let AI draft the narrative summary from what you\'ve entered.','Word export falls back automatically if offline; PowerPoint export has no offline fallback and needs a connection.','If a contract is active, "AI Extract KPIs/SLAs" pulls them straight from it — offers the same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract KPIs/SLAs" would use.','Governance now rolls up risk across every saved QBR, not just the one currently open.'],
   rebates:['Track tier thresholds against actual spend — accrued entitlement is calculated live, not typed in.','Reconcile against the supplier\'s own statement each cycle and flag variances as Disputed rather than letting them go quiet.','If a contract is active, "AI Extract Rebates" pulls rebate tiers straight from it — same quick vs. full review choice as elsewhere for long documents.','The 📄 Active: badge at the top shows which contract "AI Extract Rebates" would use.'],
   register:['One register for obligations, SLAs, and change orders — filter by type. Status auto-flags overdue items by due date.','Change orders live here rather than on their own screen, so scope drift on a contract stays with the obligations/SLAs it affects — set the Type dropdown on any row. Clause extraction below detects obligation/SLA-style language, not change-order language, so those are added manually or via the Contract Playbook.','Upload the contract once on the 0 · Tiering tab (Step 0) — this tab reflects it automatically under "Contract Analysis & Staging," with candidate obligation/SLA clauses staged for your review. Or use Contract Intake to add items directly without a document.','The "AI document review" panel below runs a full structured review of the active contract — long documents (over ~6,000 characters) show a chunk-count and cost estimate first, with a choice between a full chunked review (covers the whole document) or a quick first-section-only pass.','Its suggested tier is sourced from the same cached AI document review Tiering uses — no separate, possibly-disagreeing estimate.'],
@@ -859,6 +859,26 @@ async function askGemini(prompt){
   if(!text) throw new Error('Gemini responded successfully but returned no usable text (possibly blocked by a safety filter, hit the token limit before producing text, or used an unsupported response type). Try again, rephrase, or switch provider in Settings.');
   return text;
 }
+// Explicit keyword lists with word-boundary matching -- deriving a match keyword from the
+// category label itself (e.g. "it" from "IT & Technology") is fragile: "it" as a bare substring
+// matches inside "with", "unit", etc. Checked in list order; first match wins.
+const CATEGORY_KEYWORDS = [
+  ['Logistics & Freight', /\b(logistics?|freight|shipping|haulage|transport(ation)?|distribution|warehous\w*)\b/],
+  ['IT & Technology', /\b(software|saas|cloud|technology|it system|application|hosting|data centre|data center)\b/],
+  ['Telecom & Connectivity', /\b(telecom\w*|connectivity|broadband|network(ing)?|mobile carrier)\b/],
+  ['Professional Services', /\b(consult\w*|advisory|professional services|legal services|audit\w*)\b/],
+  ['Facilities & Estates', /\b(facilit\w*|estates?|building maintenance|cleaning services|security services)\b/],
+  ['Marketing & Media', /\b(marketing|media\b|advertis\w*|campaign)\b/],
+  ['HR & Recruitment', /\b(recruit\w*|staffing|payroll|human resources)\b/],
+  ['Raw Materials & Manufacturing', /\b(raw material\w*|manufactur\w*|production line|components?)\b/],
+  ['MRO / Indirect', /\b(mro\b|spare parts?|indirect spend)\b/],
+  ['Construction & Capital Projects', /\b(construction|capital project\w*|civil works|building works)\b/],
+  ['Financial Services', /\b(financial services|banking|insurance provider|payment processing|fintech)\b/]
+];
+function guessCategory(lowerText){
+  const hit = CATEGORY_KEYWORDS.find(([,re]) => re.test(lowerText));
+  return hit ? hit[0] : '';
+}
 function sandboxAnswer(prompt){
   // Offline, template-based draft — no network. Labelled honestly as Sandbox output.
   return new Promise(resolve=>{
@@ -866,6 +886,46 @@ function sandboxAnswer(prompt){
       resolve(`[Sandbox draft — offline template, not model-generated]\n\nBased on the inputs provided, here is a structured first pass. Review and edit before use; connect Claude or Gemini in Settings for a fully drafted narrative.\n\n${prompt.slice(0,400)}${prompt.length>400?'…':''}`);
     }, 500);
   });
+}
+// Offline heuristic for Contract Intake's "Suggest with AI" step in Sandbox mode. Unlike
+// sandboxAnswer() (a fixed template string for narrative-style prompts), this specific intake
+// flow needs a structured object back to populate form fields -- so it can't just call
+// sandboxAnswer() and JSON.parse() the result, since that always returns fixed prose, not JSON.
+// Deterministic, no network -- same honesty-about-being-a-heuristic pattern as
+// sandboxScoreContracts() below.
+function sandboxSuggestContract(desc){
+  const lower = desc.toLowerCase();
+  let value=3, risk=3, criticality=3, impact=3;
+  if(/sole source|single source|critical|core|master|strategic/.test(lower)){ risk++; criticality++; }
+  if(/office|supplies|stationery|routine|misc|catering/.test(lower)){ value--; risk--; criticality--; impact--; }
+  if(/cloud|it |software|data|security|technology/.test(lower)){ impact++; risk++; }
+  if(/logistics|freight|supply chain|distribution/.test(lower)){ criticality++; value++; }
+  const moneyMatch = desc.match(/\$?\s?([\d,]+(?:\.\d+)?)\s*(k|m|million|thousand)?/i);
+  if(moneyMatch){
+    let n = parseFloat(moneyMatch[1].replace(/,/g,''))||0;
+    const unit = (moneyMatch[2]||'').toLowerCase();
+    if(unit==='m'||unit==='million') n *= 1000000;
+    else if(unit==='k'||unit==='thousand') n *= 1000;
+    if(n>=1000000) value++;
+    if(n>=5000000) value++;
+  }
+  let name = '';
+  const nameMatch = desc.match(/(?:with|from)\s+([A-Z][\w&.,\-' ]{2,40}?)(?:[,.]| for | -|$)/);
+  if(nameMatch) name = nameMatch[1].trim();
+  const category = guessCategory(lower);
+  const sentences = desc.split(/(?<=[.!?])\s+/).map(s=>s.trim()).filter(Boolean);
+  const obligations = [], slas = [];
+  sentences.forEach(s=>{
+    const sl = s.toLowerCase();
+    const trimmed = s.length>90 ? s.slice(0,90)+'…' : s;
+    if(/renew|insurance|report|certificate|deliverable|notice/.test(sl)) obligations.push(trimmed);
+    else if(/sla|uptime|on-time|on time|delivery|response time|%/.test(sl)) slas.push(trimmed);
+  });
+  return {
+    name, category, value:clampScore(value), risk:clampScore(risk), criticality:clampScore(criticality), impact:clampScore(impact),
+    obligations: obligations.slice(0,3), slas: slas.slice(0,3),
+    rebateTier:'', rebateThreshold:'', rebateRatePct:0
+  };
 }
 function clampScore(n){ n=parseInt(n)||3; return Math.max(1,Math.min(5,n)); }
 function sandboxScoreContracts(names){
@@ -961,7 +1021,7 @@ function floaterScreenSummary(){
     case 'scorecard': return `Maturity scorecard has 15 questions across 6 dimensions, each scored 1-5.`;
     case 'governance': return `Governance rolls up tiering, register, rebates, coverage and scorecard data live — nothing entered here directly.`;
     case 'brief': return `Contract Brief for "${BRIEF_SELECTED||'(none selected)'}" — a two-page handover summary assembled from Tiering, Register, Rebates and Coverage.`;
-    case 'framework': return `This screen shows the full 0-7 CLM framework brief with CIPS/Hackett/WorldCC benchmarking, plus quick-add buttons that seed other screens.`;
+    case 'framework': return `This screen shows the full 0-7 Contract Playbook with CIPS/Hackett/WorldCC benchmarking, plus quick-add buttons that seed other screens.`;
     default: return '';
   }
 }
@@ -1022,7 +1082,7 @@ function renderAbout(){
     <div class="row" style="margin-top:16px;">
       <button class="btn gold" data-nav="tiering">Start with Section 0 — Tiering</button>
       <button class="btn outline" data-nav="intake">No document to upload? Start here →</button>
-      <button class="btn outline" data-nav="framework">Read the framework brief</button>
+      <button class="btn outline" data-nav="framework">Read the Contract Playbook</button>
       <button class="btn outline" id="btnStartTour">▶ Demo tour</button>
     </div>
   </div>
@@ -1074,7 +1134,7 @@ function renderAbout(){
   </div>
   <div class="card">
     <h2>What's new</h2>
-    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.8.0 — a UAT-driven pass covering 31 review points: consolidated Contract Intake as the single creation surface (live tier preview, Contract Duration, category suggestions, an offline CSV template as a 4th intake path) with Tiering now upload-only; renamed Framework to Contract Playbook and moved Coverage & Feedback ahead of QBR in the nav to match how data actually flows; QBR's Supplier field is now a dropdown; fixed a real duplicate-entry risk on Playbook quick-add; added a demo-tour resync when navigating manually mid-tour; and added source-of-data notes across Rebates, QBR exports, and the Maturity Scorecard.</p>
+    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.8.1 — fixes from a full end-to-end QA pass: Contract Intake's AI-assisted "Suggest with AI" now works correctly in Sandbox mode (previously crashed silently, since Sandbox's canned response was never valid JSON); the offline CSV template no longer silently drops a contract from a headerless file or creates garbage records from a binary file; and 3 leftover "Framework" references from the Contract Playbook rename are fixed.</p>
   </div>`;
 }
 
@@ -1107,7 +1167,7 @@ function renderIntake(){
       <input type="file" id="intakeTemplateUpload" accept=".csv" style="max-width:260px;">
       <button class="btn small gold" id="btnIntakeTemplateUpload">Upload & create records</button>
     </div>
-    <div id="intakeTemplateStatus" class="small" style="margin-top:6px;"></div>
+    <div id="intakeTemplateStatus" class="small" style="margin-top:6px;">${INTAKE_TEMPLATE_STATUS_HTML}</div>
   </div>
   <div class="card">
     <h3 style="margin-top:0;">1 · Contract identity</h3>
@@ -1200,9 +1260,14 @@ function wireIntake(){
 Score value/risk/criticality/impact 1-5 using standard CIPS/Hackett contract-tiering judgment (5 = highest spend/risk/criticality/impact). List up to 6 obligations and up to 6 SLAs as short phrases inferred from the description — append a due date in parentheses as (YYYY-MM-DD) only if one is stated or clearly inferable. Leave rebate fields empty/0 if no rebate is mentioned.
 Description: ${desc}`;
     try{
-      const raw = await askAI(prompt);
-      const clean = raw.replace(/```json|```/g,'').trim();
-      const parsed = JSON.parse(clean);
+      let parsed;
+      if(STATE.ai.mode==='sandbox'){
+        parsed = sandboxSuggestContract(desc);
+      }else{
+        const raw = await askAI(prompt);
+        const clean = raw.replace(/```json|```/g,'').trim();
+        parsed = JSON.parse(clean);
+      }
       if(parsed.name) document.getElementById('intakeName').value = parsed.name;
       if(parsed.category) document.getElementById('intakeCategory').value = parsed.category;
       ['value','risk','criticality','impact'].forEach(k=>{
@@ -1216,7 +1281,9 @@ Description: ${desc}`;
       if(parsed.rebateTier) document.getElementById('intakeRebateTier').value = parsed.rebateTier;
       if(parsed.rebateThreshold) document.getElementById('intakeRebateThreshold').value = parsed.rebateThreshold;
       if(parsed.rebateRatePct) document.getElementById('intakeRebateRate').value = parsed.rebateRatePct;
-      status.innerHTML = '<span style="color:var(--green);">Suggested — try adjusting anything below, watch the live preview update, then click "Confirm & Create Contract Record" when it looks right. Nothing has been saved yet.</span>';
+      status.innerHTML = STATE.ai.mode==='sandbox'
+        ? '<span style="color:var(--amber);">Sandbox offline heuristic — a rough first pass from simple keyword matching, not true text understanding. Review every field carefully, or connect Claude/Gemini in Settings for a real read of the description. Nothing has been saved yet.</span>'
+        : '<span style="color:var(--green);">Suggested — try adjusting anything below, watch the live preview update, then click "Confirm & Create Contract Record" when it looks right. Nothing has been saved yet.</span>';
     }catch(e){
       status.innerHTML = `<span style="color:var(--red);">Could not use the AI suggestion (${esc(e.message)}) — try rephrasing, or fill in the fields below manually.</span>`;
     }
@@ -1249,13 +1316,15 @@ Description: ${desc}`;
   if(tplUploadBtn) tplUploadBtn.addEventListener('click', async ()=>{
     const fileInput = document.getElementById('intakeTemplateUpload');
     const status = document.getElementById('intakeTemplateStatus');
-    if(!fileInput.files.length){ status.innerHTML = '<span style="color:var(--red);">Choose a filled-in .csv file first.</span>'; return; }
+    const setStatus = (html)=>{ INTAKE_TEMPLATE_STATUS_HTML = html; status.innerHTML = html; };
+    if(!fileInput.files.length){ setStatus('<span style="color:var(--red);">Choose a filled-in .csv file first.</span>'); return; }
     try{
       const text = await fileInput.files[0].text();
-      const rows = parseIntakeCsv(text);
-      if(!rows.length){ status.innerHTML = '<span style="color:var(--red);">No contract rows found in that file — check it matches the downloaded template\'s columns.</span>'; return; }
+      const parsed = parseIntakeCsv(text);
+      if(parsed.error){ setStatus(`<span style="color:var(--red);">${esc(parsed.error)}</span>`); return; }
+      if(!parsed.rows.length){ setStatus('<span style="color:var(--red);">No contract rows found in that file — check it matches the downloaded template\'s columns, and that the first column is a contract name.</span>'); return; }
       let created = 0;
-      rows.forEach(row=>{
+      parsed.rows.forEach(row=>{
         if(!row.name) return;
         createContractRecord({
           name: row.name, category: row.category||'', startDate: row.startdate||'', endDate: row.enddate||'',
@@ -1270,10 +1339,11 @@ Description: ${desc}`;
         created++;
       });
       saveState();
-      status.innerHTML = `<span style="color:var(--green);">Created ${created} contract record(s) from the template — review each on 0 · Tiering, the Register, Rebates and QBR.</span>`;
+      const headerNote = parsed.headerDetected ? '' : ' <b>No header row was detected</b> — every row (including what might have been intended as a header) was treated as a contract. If that\'s not right, add a first row starting with "Name" and re-upload.';
+      setStatus(`<span style="color:var(--green);">Created ${created} contract record(s) from the template — review each on 0 · Tiering, the Register, Rebates and QBR.</span><span style="color:var(--amber);">${headerNote}</span>`);
       render();
     }catch(e){
-      status.innerHTML = `<span style="color:var(--red);">Could not read that file (${esc(e.message)}) — make sure it's a plain .csv export, not .xlsx.</span>`;
+      setStatus(`<span style="color:var(--red);">Could not read that file (${esc(e.message)}) — make sure it's a plain .csv export, not .xlsx.</span>`);
     }
   });
 }
@@ -1316,9 +1386,12 @@ function downloadIntakeTemplate(){
   URL.revokeObjectURL(url);
 }
 // Minimal CSV parser (handles quoted fields with embedded commas/newlines) -- no external
-// library needed for this app's one use case. Returns an array of lowercase-keyed row objects
-// matched against INTAKE_CSV_HEADERS by position, so header wording in the template can be
-// human-friendly while parsing stays robust to it.
+// library needed for this app's one use case. Returns {rows, headerDetected, error}:
+// - error: set (and rows empty) if the content doesn't look like real text CSV at all (e.g. a
+//   binary file renamed .csv) -- refuses to parse rather than manufacturing garbage records.
+// - headerDetected: true only if row 0's first cell actually reads like "Name" -- a headerless
+//   file is NOT blindly sliced (which used to silently drop its first real contract); every row
+//   is treated as data instead, and the caller can warn if headerDetected came back false.
 function parseIntakeCsv(text){
   const rows = [];
   let row = [], field = '', inQuotes = false;
@@ -1338,13 +1411,29 @@ function parseIntakeCsv(text){
     }
   }
   if(field.length || row.length) pushRow();
-  if(!rows.length) return [];
-  const dataRows = rows.slice(1).filter(r=>r.some(v=>v && v.trim()));
-  return dataRows.map(r=>{
+  if(!rows.length) return {rows:[], headerDetected:false, error:null};
+
+  const controlCharCount = (text.match(/[\x00-\x08\x0E-\x1F\uFFFD]/g)||[]).length;
+  if(controlCharCount > text.length*0.02 || controlCharCount > 20){
+    return {rows:[], headerDetected:false, error:"This file doesn't look like plain text CSV — it may be a binary file (e.g. a renamed .xlsx, .docx, or .pdf) rather than a real .csv export. Re-download the template and save your data as CSV."};
+  }
+
+  const firstCell = (rows[0][0]||'').trim().toLowerCase();
+  const headerDetected = firstCell==='name' || firstCell.startsWith('name ') || firstCell.startsWith('name(');
+  const dataRows = (headerDetected ? rows.slice(1) : rows).filter(r=>r.some(v=>v && v.trim()));
+
+  const parsedRows = dataRows.map(r=>{
     const obj = {};
     INTAKE_CSV_HEADERS.forEach((key,i)=>{ obj[key] = (r[i]||'').trim(); });
     return obj;
+  }).filter(obj=>{
+    if(!obj.name) return false;
+    if(obj.name.length > 200) return false;
+    if(/[\x00-\x08\x0E-\x1F\uFFFD]/.test(obj.name)) return false;
+    return true;
   });
+
+  return {rows:parsedRows, headerDetected, error:null};
 }
 
 /* ========== TIERING ========== */
@@ -1523,7 +1612,7 @@ function renderFramework(){
     });
     return html;
   })()}</div>
-  <div class="row"><button class="btn outline" id="btnFwExport">Export framework brief to Word</button></div>`;
+  <div class="row"><button class="btn outline" id="btnFwExport">Export Contract Playbook to Word</button></div>`;
 }
 
 /* ========== QBR ========== */
@@ -2960,7 +3049,7 @@ function wireFramework(){
     }
   });
   document.getElementById('btnFwExport').addEventListener('click',()=>{
-    exportDocxReal('CLM Framework Brief', mdToBlocks(FRAMEWORK_MD));
+    exportDocxReal('CLM Contract Playbook', mdToBlocks(FRAMEWORK_MD));
   });
 }
 
@@ -3808,6 +3897,10 @@ const TOUR = [
 ];
 let ABOUT_STEP = 0;
 let FW_TARGET_CONTRACT = '';
+// Persists the CSV-import result message across the render() call the handler triggers --
+// otherwise renderIntake()'s default empty status div wipes it immediately (the render() runs
+// right after the message is set, redrawing the whole screen from scratch).
+let INTAKE_TEMPLATE_STATUS_HTML = '';
 let tourIndex = -1;
 let TOUR_POS = null;
 let TOUR_COLLAPSED = false;
