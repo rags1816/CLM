@@ -188,7 +188,13 @@ standalone via typed summaries, rather than compete with it.
 
 ## Version history
 
-- **v2.8.1 [current]**: Fixes from a full end-to-end QA pass on v2.8.0 —
+- **v2.8.2 [current]**: About screen CTA buttons reordered/reworded to
+  put Contract Intake first, matching the actual v2.8.0 architecture
+  (previously still framed document upload as the default path). Found
+  during a documentation/UX sync check that otherwise confirmed the demo
+  tour, About screen, and floating reference guide all correctly reflect
+  the current architecture. See `CHANGELOG.md` for detail.
+- **v2.8.1**: Fixes from a full end-to-end QA pass on v2.8.0 —
   Contract Intake's Sandbox-mode AI suggestion (was completely
   non-functional out of the box), two silent-failure bugs in the offline
   CSV template (a headerless file dropping its first contract; a binary

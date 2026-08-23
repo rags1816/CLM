@@ -155,7 +155,7 @@
 
 /* ---------- constants ---------- */
 /* ---------- version (single source of truth — bump this, nothing else) ---------- */
-const APP_VERSION = '2.8.1';
+const APP_VERSION = '2.8.2';
 
 const SCREENS = [
   {id:'about', label:'About'},
@@ -1080,8 +1080,8 @@ function renderAbout(){
     <h1>Stop losing value after the ink dries.</h1>
     <p>WorldCC research puts average value leakage from poor post-signature contract management at roughly 9% of contract value — unmanaged obligations, unclaimed rebates, missed renegotiation windows. CLM Suite is a single-file, self-contained toolkit to close that gap: tier contracts, track obligations and SLAs, monitor rebates, run tiered QBRs, and give the CPO a live governance view — all in your browser, your data never leaves this device.</p>
     <div class="row" style="margin-top:16px;">
-      <button class="btn gold" data-nav="tiering">Start with Section 0 — Tiering</button>
-      <button class="btn outline" data-nav="intake">No document to upload? Start here →</button>
+      <button class="btn gold" data-nav="intake">Create a contract record</button>
+      <button class="btn outline" data-nav="tiering">Have a document? Upload it directly →</button>
       <button class="btn outline" data-nav="framework">Read the Contract Playbook</button>
       <button class="btn outline" id="btnStartTour">▶ Demo tour</button>
     </div>
@@ -1134,7 +1134,7 @@ function renderAbout(){
   </div>
   <div class="card">
     <h2>What's new</h2>
-    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.8.1 — fixes from a full end-to-end QA pass: Contract Intake's AI-assisted "Suggest with AI" now works correctly in Sandbox mode (previously crashed silently, since Sandbox's canned response was never valid JSON); the offline CSV template no longer silently drops a contract from a headerless file or creates garbage records from a binary file; and 3 leftover "Framework" references from the Contract Playbook rename are fixed.</p>
+    <p class="small">See <code>CHANGELOG.md</code> for full version history. Most recent: v2.8.2 — a documentation/UX sync check confirmed the demo tour, About screen, and floating reference guide all correctly match the v2.8.0/2.8.1 architecture, with one real gap fixed: the About screen's CTA buttons still framed document upload as the default path and Contract Intake as the fallback, backwards from the actual v2.8.0 architecture where Contract Intake is the primary creation surface. Reordered and reworded to match.</p>
   </div>`;
 }
 
