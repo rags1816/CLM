@@ -29,7 +29,7 @@ instance/
 *.sqlite3
 *.db
  
-# --- Node (if any build tooling is used) ---
+# --- Node (if any build tooling is used) ---*.do *
 node_modules/
 npm-debug.log*
 yarn-error.log*
@@ -50,6 +50,4 @@ scratch/
 
 BPO Lot 2 Accenture - Renewal Rate Card.docx
 FINAL variation agreement ACCENTURE_30082023.pdf
-*.docx
-*.pdf
-!docs/CLM_Suite_v2.7.1_UAT_Test_Script.docx
+

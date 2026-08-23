@@ -4,7 +4,27 @@ All notable changes to CLM Suite are recorded here, most recent first. For
 version history prior to this file's creation, see the **Version history**
 section of `METHODOLOGY.md`.
 
-## v2.8.1 [current] — Fixes from the first full E2E QA pass
+## v2.8.2 [current] — About screen CTA sync fix
+
+A documentation/UX sync check confirmed the demo tour, About screen
+content, and floating reference guide (GUIDE_TIPS + floaterScreenSummary)
+all correctly reflect the v2.8.0/v2.8.1 architecture — tour sequence
+matches nav order exactly, all 12 screens have guide tips, no remaining
+"Framework" (vs. "Contract Playbook") references anywhere in tour/About/
+floater text. One real gap found and fixed:
+
+- **About screen's hero CTA buttons were backwards relative to the actual
+  v2.8.0 architecture.** They still read "Start with Section 0 — Tiering"
+  (gold, primary) / "No document to upload? Start here →" (Contract
+  Intake, secondary) — framing document upload as the default path and
+  Contract Intake as the fallback. Since v2.8.0, Contract Intake is the
+  primary consolidated creation surface (all 4 paths, including document
+  upload); Tiering is upload-only and points back to Intake for anything
+  else. Reordered and reworded: "Create a contract record" (Contract
+  Intake, primary) / "Have a document? Upload it directly →" (Tiering,
+  secondary).
+
+## v2.8.1 — Fixes from the first full E2E QA pass
 
 The v2.8.0 UAT-driven pass got its own follow-up: a full end-to-end QA
 pass (`docs/QA_TESTING_PROMPT_v2.8.0_FULL.md`) against the live app found
